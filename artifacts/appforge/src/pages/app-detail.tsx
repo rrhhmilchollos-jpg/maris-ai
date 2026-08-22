@@ -797,7 +797,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   // corriendo en el sandbox, no un bundle servido por Maris AI.
   const deployedUrl = (app?.renderMode === "ssr-live" && app?.livePreviewUrl)
     ? app.livePreviewUrl
-    : app?.marisaiPublishUrl || app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "") || previewEndpointUrl;
+    : app?.marisaiPublishUrl || app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "");
 
   const isDeployedForShowcase = !!(app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || app?.marisaiSubdomain);
 
