@@ -90,7 +90,7 @@ export function LivePreview({
   }
 
   return (
-    <div className="relative flex h-full flex-col bg-[#0a0a0f]">
+    <div className="relative flex h-full w-full min-w-0 flex-col bg-[#0a0a0f]">
       {/* Toolbar mínimo */}
       <div className="flex shrink-0 items-center gap-1 border-b border-white/[0.06] px-2 py-1">
         <span className="min-w-0 flex-1 truncate text-[11px] text-white/30">{iframeSrc}</span>
