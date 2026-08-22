@@ -18,20 +18,26 @@ export function initSentry(): void {
     environment: import.meta.env.MODE,
     tracesSampleRate: 0,
     sendDefaultPii: false,
-    // Enable the default breadcrumb integrations explicitly so we record the
-    // user's behaviour leading up to an error: every fetch/XHR call (which
-    // covers all our React Query calls to /api), every console.error, every
-    // page navigation, and every relevant click. This is what gives Sentry
-    // events an actionable "what was the user doing" timeline.
+    // Capturamos solo navegación; no clicks, consola, formularios ni llamadas
+    // para que la telemetría no contenga contenido de clientes.
     integrations: [
       Sentry.breadcrumbsIntegration({
-        console: true,
-        dom: true,
-        fetch: true,
+        console: false,
+        dom: false,
+        fetch: false,
         history: true,
-        xhr: true,
+        xhr: false,
       }),
     ],
+    beforeSend(event) {
+      if (event.request?.headers) {
+        delete event.request.headers.authorization;
+        delete event.request.headers.cookie;
+      }
+      if (event.request) delete event.request.data;
+      delete event.user;
+      return event;
+    },
   });
   initialized = true;
 }
@@ -56,7 +62,7 @@ export function addBreadcrumb(
 export function setSentryUser(user: { id: string; email?: string } | null): void {
   if (!initialized) return;
   if (user) {
-    Sentry.setUser({ id: user.id, email: user.email });
+    Sentry.setUser({ id: user.id });
   } else {
     Sentry.setUser(null);
   }

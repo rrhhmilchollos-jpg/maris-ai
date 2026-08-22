@@ -24,7 +24,7 @@ interface PresenceResponse {
 }
 
 /**
- * Presencia en vivo — quién tiene Maris AI abierto AHORA MISMO.
+ * Clientes en vivo — quién tiene Maris AI abierto AHORA MISMO.
  *
  * El backend mantiene el estado real en memoria vía socket.io (ver
  * lib/presence.ts en el servidor); este panel solo consulta ese estado
@@ -93,10 +93,10 @@ export function AdminPresencePanel() {
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Wifi className="h-4 w-4 text-emerald-400" />
-              Conectados ahora mismo
+              Clientes conectados ahora mismo
             </CardTitle>
             <CardDescription>
-              Usuarios con Maris AI abierto en este instante — se actualiza solo cada 5s.
+              Clientes con Maris AI abierto en este instante. Muestra la actividad operativa sin exponer el contenido de sus proyectos y se actualiza cada 5 s.
             </CardDescription>
           </div>
           <Button variant="ghost" size="sm" onClick={handleManualRefresh} disabled={refreshing}>

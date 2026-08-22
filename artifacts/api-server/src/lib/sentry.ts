@@ -23,6 +23,8 @@ export function initSentry(): void {
         delete event.request.headers["authorization"];
         delete event.request.headers["cookie"];
       }
+      if (event.request) delete event.request.data;
+      delete event.user;
       return event;
     },
   });
@@ -52,7 +54,6 @@ export function captureAgentError(
       scope.setTag("phase", context.phase);
       if (context.jobId !== undefined) scope.setTag("jobId", String(context.jobId));
       if (context.appId !== undefined) scope.setTag("appId", String(context.appId));
-      if (context.userId) scope.setUser({ id: context.userId });
       if (context.extra) scope.setExtras(context.extra);
       Sentry.captureException(err);
     });

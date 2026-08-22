@@ -9982,20 +9982,30 @@ try {
 // que falle del todo).
 router.post("/panel-error", async (req, res) => {
   try {
-    const { message, stack, componentStack, pathname, userId } = req.body || {};
-    if (!message || typeof message !== "string") {
-      return res.status(400).json({ error: "message requerido" });
-    }
+    const { message, stack, componentStack, pathname, userId, fingerprint, name, component } = req.body || {};
+    const safeFingerprint = typeof fingerprint === "string" ? fingerprint.slice(0, 96) : undefined;
+    const safeName = typeof name === "string" ? name.slice(0, 120) : undefined;
+    const normalizedMessage = typeof message === "string" && message.trim()
+      ? message.slice(0, 500)
+      : safeFingerprint
+        ? `Error de interfaz agrupado: ${safeFingerprint}`
+        : safeName
+          ? `Error de interfaz: ${safeName}`
+          : "Error de interfaz sin detalle";
     const { PanelRuntimeError } = await import("@workspace/db/schema");
     await (PanelRuntimeError as any).create({
       userId: typeof userId === "string" ? userId : undefined,
-      message: message.slice(0, 500),
+      message: normalizedMessage,
       stack: typeof stack === "string" ? stack.slice(0, 3000) : undefined,
-      componentStack: typeof componentStack === "string" ? componentStack.slice(0, 2000) : undefined,
+      componentStack: typeof componentStack === "string"
+        ? componentStack.slice(0, 2000)
+        : typeof component === "string"
+          ? component.slice(0, 180)
+          : undefined,
       pathname: typeof pathname === "string" ? pathname.slice(0, 300) : undefined,
       userAgent: (req.headers["user-agent"] as string)?.slice(0, 300),
     });
-    logger.warn({ message, pathname, userId }, "[panel-error] Error real del panel capturado");
+    logger.warn({ fingerprint: safeFingerprint, name: safeName, pathname }, "[panel-error] Incidencia de panel agrupada");
     return res.status(204).end();
   } catch (err) {
     // Reportar un error nunca debe en sí mismo producir un error visible

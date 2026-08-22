@@ -9,9 +9,30 @@ type SeoGeoTopic = {
   cities: string[];
   schemaType: "Article" | "FAQPage" | "HowTo";
   questions: string[];
+  sourceUrls?: string[];
 };
 
 const TOPICS: SeoGeoTopic[] = [
+  {
+    primaryQuery: "maris ai vs emergent",
+    title: "Maris AI vs Emergent: cómo comparar plataformas para crear apps con IA",
+    audience: "emprendedores, pymes y equipos de producto en España",
+    intent: "comparison",
+    cities: ["Madrid", "Barcelona", "Valencia", "Málaga"],
+    schemaType: "Article",
+    questions: ["¿Qué debe incluir una comparación de creadores de apps con IA?", "¿Qué conviene validar antes de desplegar una app?", "¿Cómo revisar el control sobre código, datos y publicación?"],
+    sourceUrls: ["https://www.marisai.es/", "https://emergent.sh/"],
+  },
+  {
+    primaryQuery: "maris ai vs lovable",
+    title: "Maris AI vs Lovable: criterios para elegir un creador de software con IA",
+    audience: "fundadores, autónomos y responsables de innovación en España",
+    intent: "comparison",
+    cities: ["Sevilla", "Bilbao", "Zaragoza", "Alicante"],
+    schemaType: "Article",
+    questions: ["¿Qué flujos conviene comparar entre plataformas de IA?", "¿Qué pruebas deben hacerse antes de publicar?", "¿Qué debe exigir una empresa sobre seguridad y soporte?"],
+    sourceUrls: ["https://www.marisai.es/", "https://lovable.dev/"],
+  },
   {
     primaryQuery: "crear una aplicación web con inteligencia artificial",
     title: "Cómo crear una aplicación web con inteligencia artificial: guía práctica",
@@ -82,9 +103,9 @@ function buildDraft(topic: SeoGeoTopic, dateKey: string) {
   const metaDescription = `Guía para ${topic.audience}: entiende ${topic.primaryQuery}, compara opciones y decide con criterios prácticos.`.slice(0, 155);
   const outline = [
     `Qué significa ${topic.primaryQuery} y para quién tiene sentido`,
-    "Qué información preparar antes de empezar",
-    "Proceso recomendado paso a paso",
-    "Cómo revisar calidad, seguridad y propiedad del resultado",
+    topic.intent === "comparison" ? "Capacidades declaradas por cada plataforma y fuentes primarias" : "Qué información preparar antes de empezar",
+    topic.intent === "comparison" ? "Criterios comparables: generación, edición, pruebas, publicación y control" : "Proceso recomendado paso a paso",
+    "Cómo revisar calidad, seguridad, propiedad y soporte del resultado",
     "Errores frecuentes y cómo evitarlos",
     "Preguntas frecuentes",
   ];
@@ -102,11 +123,12 @@ function buildDraft(topic: SeoGeoTopic, dateKey: string) {
     cities: topic.cities,
     audience: topic.audience,
     intent: topic.intent,
+    sourceUrls: topic.sourceUrls || [],
     outline,
     faq,
     metaTitle,
     metaDescription,
-    aiSummary: `Propuesta GEO para ${topic.primaryQuery}. Dirigida a ${topic.audience}. Incluye estructura, preguntas y señal geográfica ${topic.cities.join(", ")}. Requiere revisión editorial antes de publicarse.`,
+    aiSummary: `Propuesta GEO para ${topic.primaryQuery}. Dirigida a ${topic.audience}. Incluye estructura, preguntas, señal geográfica ${topic.cities.join(", ")} y fuentes primarias para revisión. Requiere revisión editorial antes de publicarse.`,
     schemaType: topic.schemaType,
     qualityScore: 86,
     status: "draft" as const,

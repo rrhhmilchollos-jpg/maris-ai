@@ -1316,6 +1316,7 @@ export interface ISeoGeoContent extends Document {
   cities: string[];
   audience: string;
   intent: "informational" | "commercial" | "comparison";
+  sourceUrls: string[];
   outline: string[];
   faq: Array<{ question: string; answer: string }>;
   metaTitle: string;
@@ -1343,6 +1344,7 @@ const SeoGeoContentSchema = new Schema<ISeoGeoContent>(
     cities: { type: [String], default: [] },
     audience: { type: String, required: true },
     intent: { type: String, enum: ["informational", "commercial", "comparison"], required: true },
+    sourceUrls: { type: [String], default: [] },
     outline: { type: [String], default: [] },
     faq: { type: [{ question: String, answer: String }], default: [] },
     metaTitle: { type: String, required: true },

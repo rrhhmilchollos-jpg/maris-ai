@@ -421,7 +421,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
         <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="bg-card/40 border border-white/5 flex-wrap h-auto gap-1 p-1">
             <TabsTrigger value="users"><Users className="h-4 w-4 mr-2" /> Usuarios</TabsTrigger>
-            <TabsTrigger value="presence"><Wifi className="h-4 w-4 mr-2" /> En vivo</TabsTrigger>
+            <TabsTrigger value="presence"><Wifi className="h-4 w-4 mr-2" /> Clientes en vivo</TabsTrigger>
             <TabsTrigger value="apps"><Code2 className="h-4 w-4 mr-2" /> Apps</TabsTrigger>
             <TabsTrigger value="catalog"><BriefcaseBusiness className="h-4 w-4 mr-2" /> Catálogo privado</TabsTrigger>
             <TabsTrigger value="memory" onClick={() => { if (!memory) void loadMemory(); }}>

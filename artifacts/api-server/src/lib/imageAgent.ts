@@ -1,4 +1,3 @@
-import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { AppImage, GeneratedApp } from "@workspace/db/schema";
 import { logger } from "./logger";
@@ -40,29 +39,18 @@ function appBaseUrl(): string {
   return host ? `https://${host}` : "";
 }
 
-// CONEXIÓN EXCLUSIVA A ZOCO IA: el cliente de imágenes ya no usa las claves
-// nativas de Gemini — viaja por el gateway multimodal de Zoco IA con la API
-// Key de la organización (sk-zoco-...). Lazy + Proxy para no romper el
-// arranque si el gateway aún no está configurado (el error salta al usarlo).
+// Motor de imágenes exclusivo de Maris AI. Si todavía no hay proveedor propio
+// configurado, el agente no rompe una generación: conserva las imágenes ya
+// presentes y devuelve un resultado sin sustituciones.
 let _imageClient: GoogleGenAI | null = null;
-function getImageClient(): GoogleGenAI {
+function getImageClient(): GoogleGenAI | null {
   if (_imageClient) return _imageClient;
-  const apiKey = process.env.ZOCOIA_API_KEY;
-  const baseUrl = process.env.ZOCOIA_GEMINI_GATEWAY_URL;
-  if (!apiKey || !apiKey.startsWith("sk-zoco-") || !baseUrl) {
-    throw new Error(
-      "Generación de imágenes no configurada: define ZOCOIA_API_KEY (sk-zoco-...) y ZOCOIA_GEMINI_GATEWAY_URL. " +
-        "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por zocoia.",
-    );
-  }
+  const apiKey = String(process.env.MARIS_IMAGE_API_KEY || "").trim();
+  const baseUrl = String(process.env.MARIS_IMAGE_GATEWAY_URL || "").trim();
+  if (!apiKey || !baseUrl) return null;
   _imageClient = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: "", baseUrl } });
   return _imageClient;
 }
-const imageClient = new Proxy({} as GoogleGenAI, {
-  get(_target, prop) {
-    return (getImageClient() as any)[prop];
-  },
-});
 
 const PLACEHOLDER_URL_REGEX =
   /https?:\/\/(?:images\.unsplash\.com|source\.unsplash\.com|picsum\.photos)\/[^\s"'`)<>]+/g;
@@ -198,6 +186,11 @@ const IMAGE_MODELS = [
 async function generateOne(
   prompt: string,
 ): Promise<{ b64_json: string; mimeType: string } | null> {
+  const imageClient = getImageClient();
+  if (!imageClient) {
+    logger.info("Image Agent: proveedor propio de imágenes no configurado; se conservan los recursos existentes");
+    return null;
+  }
   // Intentar con cada modelo hasta que uno funcione
   for (const model of IMAGE_MODELS) {
     for (let attempt = 1; attempt <= 2; attempt++) {

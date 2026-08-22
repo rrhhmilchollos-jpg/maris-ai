@@ -1,3 +1,4 @@
+// Salud de interfaz: errores técnicos se reportan de forma minimizada y nunca se muestran al cliente.
 import { Component, type ReactNode, type ErrorInfo, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { getApiUrl } from "@/lib/api-client";
@@ -11,6 +12,16 @@ interface State {
   hasError: boolean;
   error: Error | null;
   errorPathname: string | null; // ruta donde ocurrió el error
+}
+
+function fingerprintError(error: Error, pathname: string | undefined) {
+  const source = `${error.name}|${error.message}|${pathname || ""}`;
+  let value = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    value ^= source.charCodeAt(index);
+    value = Math.imul(value, 16777619);
+  }
+  return `ui-${(value >>> 0).toString(36)}`;
 }
 
 /**
@@ -50,17 +61,18 @@ export class ErrorBoundary extends Component<Props, State> {
     } catch (_) {}
     console.error("[Maris AI] Error crítico de renderizado:", error, info);
 
-    // Reportar el error exacto al backend (best-effort)
+    // El cliente no necesita ver un stack trace. El backend recibe solo una
+    // huella estable y el contexto mínimo necesario para agrupar incidencias.
     try {
+      const pathname = typeof window !== "undefined" ? window.location.pathname : undefined;
       fetch(getApiUrl("/api/panel-error"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: error.message,
-          stack: error.stack,
-          componentStack: info.componentStack,
-          pathname: typeof window !== "undefined" ? window.location.pathname : undefined,
-          userId: (window as any).Clerk?.user?.id,
+          fingerprint: fingerprintError(error, pathname),
+          name: error.name || "RenderError",
+          pathname,
+          component: info.componentStack?.split("\n").find(Boolean)?.trim().slice(0, 180),
         }),
         keepalive: true,
       }).catch(() => { /* best-effort */ });
@@ -82,8 +94,6 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       const errorMsg = this.state.error?.message || "";
-      const errorStack = this.state.error?.stack || "";
-
       // Excluir errores de WebSocket/Socket.io de ser clasificados como
       // errores de Clerk — estos errores pueden tener "clerk" en el stack
       // porque el bundle de vendor-clerk incluye el scheduler de React.
@@ -95,16 +105,7 @@ export class ErrorBoundary extends Component<Props, State> {
         errorMsg.includes("Clerk") ||
         errorMsg.includes("clerk") ||
         errorMsg.includes("publishableKey") ||
-        // Solo considerar "clerk" en el stack si el MENSAJE también
-        // sugiere un problema de autenticación real (no un error genérico
-        // que simplemente pasa por el scheduler empaquetado en vendor-clerk)
-        (errorStack.includes("clerk") && (
-          errorMsg.includes("auth") ||
-          errorMsg.includes("token") ||
-          errorMsg.includes("session") ||
-          errorMsg.includes("publishable") ||
-          errorMsg.includes("Clerk")
-        ))
+        errorMsg.includes("session")
       );
 
       return (
@@ -138,7 +139,7 @@ export class ErrorBoundary extends Component<Props, State> {
               color: "white",
             }}
           >
-            {isClerkError ? "Error de autenticación" : "Algo salió mal"}
+            {isClerkError ? "No se pudo recuperar tu sesión" : "Esta vista necesita recargarse"}
           </h1>
 
           <p
@@ -150,30 +151,9 @@ export class ErrorBoundary extends Component<Props, State> {
             }}
           >
             {isClerkError
-              ? "El sistema de autenticación no pudo cargarse. Esto puede deberse a un problema de red o de configuración. Intenta recargar la página."
-              : "Se produjo un error inesperado. Por favor, recarga la página o contacta con soporte si el problema persiste."}
+              ? "Tu trabajo guardado no se ha modificado. Recarga la página para recuperar la sesión de forma segura."
+              : "Tu proyecto y la última versión sana siguen protegidos. Recarga esta vista para continuar."}
           </p>
-
-          {process.env.NODE_ENV === "development" && this.state.error && (
-            <pre
-              style={{
-                background: "hsl(240 10% 8%)",
-                border: "1px solid hsl(240 4% 16%)",
-                borderRadius: "0.5rem",
-                padding: "1rem",
-                fontSize: "0.75rem",
-                color: "hsl(0 72% 65%)",
-                maxWidth: "600px",
-                overflow: "auto",
-                marginBottom: "1.5rem",
-                textAlign: "left",
-              }}
-            >
-              {this.state.error.message}
-              {"\n"}
-              {this.state.error.stack?.split("\n").slice(0, 5).join("\n")}
-            </pre>
-          )}
 
           <button
             onClick={this.handleReload}

@@ -1,8 +1,8 @@
 export { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
-// MOTOR DE IA: Ollama local a través del gateway interno de Zoco IA.
+// MOTOR DE IA: Ollama local propio de Maris AI.
 // Todo el pipeline multi-agente (Researcher, Architect, Designer, Frontend,
 // Backend, QA, Patcher, Repair y chat) utiliza los modelos instalados en Hetzner.
-// Configuración: ZOCOIA_API_URL + ZOCOIA_API_KEY.
+// Configuración: MARIS_LLM_URL + MARIS_LLM_API_KEY.
 import { anthropic as claude, resolveClaudeModel, CLAUDE_MODELS } from "@workspace/integrations-anthropic-ai";
 import { logger } from "./logger";
 import { recordApiUsage } from "./usageMeter";
@@ -80,9 +80,8 @@ function systemToText(system: any): string {
 }
 
 
-// Traducción de alias internos (zoco-*, legado Ollama/DeepSeek) al modelo
-// Claude real — delega en resolveClaudeModel del paquete de integración.
-export function zocoModelFor(model: string): string {
+// Traducción de alias heredados al modelo propio de Maris AI.
+export function marisModelFor(model: string): string {
   return resolveClaudeModel(model);
 }
 
@@ -231,15 +230,14 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Pr
   ]);
 }
 
-// Modelos Claude disponibles como cadena de fallback: si el primario falla,
-// se intenta con el resto en este orden (estándar → máximo → rápido).
-const ZOCO_MODELS = [CLAUDE_MODELS.standard, CLAUDE_MODELS.max, CLAUDE_MODELS.fast];
+// Modelos del motor propio disponibles como cadena de fallback.
+const MARIS_MODELS = [CLAUDE_MODELS.standard, CLAUDE_MODELS.max, CLAUDE_MODELS.fast];
 
-function fallbackZocoModels(model: string): string[] {
-  // El modelo solicitado (traducido a su ID Claude real) actúa de primario;
-  // el resto de la familia Claude queda como respaldo.
+function fallbackMarisModels(model: string): string[] {
+  // El modelo solicitado actúa de primario; el resto del motor propio queda
+  // como respaldo sin salir de la infraestructura de Maris AI.
   const primary = resolveClaudeModel(model);
-  return [primary, ...ZOCO_MODELS.filter((m) => m !== primary)];
+  return [primary, ...MARIS_MODELS.filter((m) => m !== primary)];
 }
 
 // Timeout duro para cualquier llamada a un proveedor de IA dentro de este
@@ -294,12 +292,12 @@ export async function createZocoMessageWithFallback(
     ].filter(Boolean);
   }
 
-  // MOTOR OLLAMA LOCAL: se llama al gateway de Zoco IA con streaming usando
+  // MOTOR OLLAMA LOCAL: se llama al gateway propio de Maris AI con streaming usando
   // el formato Messages nativo (system + messages con bloques). La firma y el
   // formato de retorno ({content:[{type:'text',text}]}) se mantienen idénticos
   // para que los 18+ consumidores del pipeline no necesiten cambios. Si el
   // modelo primario falla, se recorre la cadena de fallback de Claude.
-  const candidates = fallbackZocoModels(model);
+  const candidates = fallbackMarisModels(model);
 
   for (const claudeModel of candidates) {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -421,7 +419,7 @@ export async function createZocoToolCallWithFallback(role: AgentRole, model: str
     return `${systemText}\n\nAVAILABLE TOOLS:\n${toolList}\n\nTo call a tool, respond with ONLY a pure JSON object (no markdown fences, no commentary): {"tool": "<tool_name>", "input": { ...arguments... }}. If no tool is needed, respond with your final answer as plain text.`;
   };
 
-  const candidates = fallbackZocoModels(model);
+  const candidates = fallbackMarisModels(model);
   for (const claudeModel of candidates) {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
@@ -934,4 +932,3 @@ export async function createToolCallCompletionStream(
     yield { type: 'content_block_delta', delta: { type: 'text_delta', text: response.content[0].text } };
   })();
 }
-
