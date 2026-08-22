@@ -266,7 +266,7 @@ export async function createZocoMessageWithFallback(
   meterOpts?: { jobId?: string },
 ): Promise<any> {
   let lastError: unknown;
-  const MAX_RETRIES = 3;
+  const MAX_RETRIES = 2;
 
   const MIN_CACHEABLE_CHARS = 3500; 
   if (typeof params.system === "string" && params.system.length >= MIN_CACHEABLE_CHARS) {
@@ -373,6 +373,12 @@ export async function createZocoMessageWithFallback(
         break;
       }
     }
+  }
+
+  const finalErrorText = String((lastError as any)?.message || lastError || "");
+  if (/timed out|timeout|HTTP 5\d\d|aborted|fetch failed/i.test(finalErrorText)) {
+    logger.warn({ role, finalErrorText }, "El motor local agotó el límite o devolvió 5xx; se cierra el job sin una llamada secundaria redundante");
+    throw lastError instanceof Error ? lastError : new Error(finalErrorText || "El motor local no respondió");
   }
 
   logger.warn({ role }, "Canal streaming de Claude falló — intentando canal secundario no-streaming (messages.create)...");

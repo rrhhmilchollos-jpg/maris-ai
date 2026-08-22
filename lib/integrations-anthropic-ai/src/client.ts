@@ -27,6 +27,7 @@ type LocalMessageResponse = {
 };
 
 type LlmConfig = { baseUrl: string; apiKey: string; mode: "maris" | "legacy" };
+const LOCAL_REQUEST_TIMEOUT_MS = Number(process.env.MARIS_LLM_REQUEST_TIMEOUT_MS || 70_000);
 
 const MARIS_MODELS = {
   fast: process.env.MARIS_LLM_MODEL_FAST || process.env.MARIS_LLM_MODEL || "qwen2.5-coder:1.5b",
@@ -103,58 +104,68 @@ function normalizeMarisMessages(params: LocalMessageParams) {
 }
 
 async function requestLocalModel(params: LocalMessageParams, signal?: AbortSignal): Promise<LocalMessageResponse> {
-  const config = getConfig();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LOCAL_REQUEST_TIMEOUT_MS);
+  const abortFromParent = () => controller.abort();
+  signal?.addEventListener("abort", abortFromParent, { once: true });
 
-  if (config.mode === "maris") {
-    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+  try {
+    const config = getConfig();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+
+    if (config.mode === "maris") {
+      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: resolveClaudeModel(params.model),
+          messages: normalizeMarisMessages(params),
+          max_tokens: params.max_tokens || 4096,
+          temperature: params.temperature ?? 0.2,
+          stream: false,
+        }),
+        signal: controller.signal,
+      });
+      const body: any = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(body?.error?.message || body?.error || `El motor propio de Maris respondió HTTP ${response.status}`) as Error & { status?: number };
+        error.status = response.status;
+        throw error;
+      }
+      const text = String(body?.choices?.[0]?.message?.content || "").trim();
+      if (!text) throw new Error("El motor propio de Maris devolvió una respuesta vacía.");
+      return {
+        id: body?.id,
+        type: "message",
+        role: "assistant",
+        model: body?.model || resolveClaudeModel(params.model),
+        content: [{ type: "text", text }],
+        stop_reason: body?.choices?.[0]?.finish_reason || "end_turn",
+        usage: {
+          input_tokens: Number(body?.usage?.prompt_tokens || 0),
+          output_tokens: Number(body?.usage?.completion_tokens || 0),
+        },
+      };
+    }
+
+    const response = await fetch(`${config.baseUrl}/v1/messages`, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        model: resolveClaudeModel(params.model),
-        messages: normalizeMarisMessages(params),
-        max_tokens: params.max_tokens || 4096,
-        temperature: params.temperature ?? 0.2,
-        stream: false,
-      }),
-      signal,
+      body: JSON.stringify(normalizeLegacyParams(params)),
+      signal: controller.signal,
     });
-    const body: any = await response.json().catch(() => ({}));
+    const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(body?.error?.message || body?.error || `El motor propio de Maris respondió HTTP ${response.status}`) as Error & { status?: number };
+      const error = new Error((body as any)?.error?.message || `La pasarela heredada respondió HTTP ${response.status}`) as Error & { status?: number };
       error.status = response.status;
       throw error;
     }
-    const text = String(body?.choices?.[0]?.message?.content || "").trim();
-    if (!text) throw new Error("El motor propio de Maris devolvió una respuesta vacía.");
-    return {
-      id: body?.id,
-      type: "message",
-      role: "assistant",
-      model: body?.model || resolveClaudeModel(params.model),
-      content: [{ type: "text", text }],
-      stop_reason: body?.choices?.[0]?.finish_reason || "end_turn",
-      usage: {
-        input_tokens: Number(body?.usage?.prompt_tokens || 0),
-        output_tokens: Number(body?.usage?.completion_tokens || 0),
-      },
-    };
+    return body as LocalMessageResponse;
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener("abort", abortFromParent);
   }
-
-  const response = await fetch(`${config.baseUrl}/v1/messages`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(normalizeLegacyParams(params)),
-    signal,
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error((body as any)?.error?.message || `La pasarela heredada respondió HTTP ${response.status}`) as Error & { status?: number };
-    error.status = response.status;
-    throw error;
-  }
-  return body as LocalMessageResponse;
 }
 
 class LocalMessageStream {
