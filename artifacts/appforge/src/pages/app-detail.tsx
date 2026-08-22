@@ -656,8 +656,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         setPreviewKey((value) => value + 1);
       });
       setActiveJobId(null);
-      // La comprobación visual es opcional y de solo lectura: no se abre ni se ejecuta automáticamente al terminar una generación.
-      toast({ title: "¡Cambios aplicados!", description: "La previsualización se ha recargado automáticamente con la actualización." });
+      // El historial del trabajo es la única fuente de verdad para los cambios
+      // aplicados. No se muestra un toast genérico porque puede corresponder a un
+      // job histórico que no dejó una mutación persistida.
     } else if (job?.status === "failed" || (job?.status === "reviewing" && job?.errorMessage)) {
       queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
       setActiveJobId(null);
