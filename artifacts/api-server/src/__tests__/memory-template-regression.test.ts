@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { buildDeterministicMemory } from "../lib/agentMemoryExtractor";
-import { TEMPLATES, buildAgentTemplateContextBlock, selectAgentGenerationBlueprint } from "../lib/templates";
+import { TEMPLATES, buildAgentTemplateContextBlock, buildDeterministicPlanPreview, selectAgentGenerationBlueprint } from "../lib/templates";
 import { detectBusinessVertical } from "../lib/projectPlaybooks";
 
 let failures = 0;
@@ -37,9 +37,12 @@ const velozYaPrompts = [
 for (const [index, deliveryPrompt] of velozYaPrompts.entries()) {
   const deliveryBlueprint = selectAgentGenerationBlueprint(deliveryPrompt, "fullstack");
   const context = buildAgentTemplateContextBlock({ prompt: deliveryPrompt, kind: "fullstack" }).toLowerCase();
+  const visiblePlan = buildDeterministicPlanPreview(deliveryPrompt, "fullstack");
+  const visiblePlanFeatures = JSON.stringify([visiblePlan.title, visiblePlan.included, visiblePlan.extras]).toLowerCase();
   expect(`VelozYa ${index + 1} selecciona delivery`, deliveryBlueprint.id === "local-delivery");
   expect(`VelozYa ${index + 1} conserva comercios, pedidos y reparto`, /restaurantes|comida/.test(context) && /pedido/.test(context) && /reparto/.test(context));
   expect(`VelozYa ${index + 1} excluye alojamiento y reserva`, !/alojamiento|hotel|reserva|anfitrion|vuelo/.test(context));
+  expect(`VelozYa ${index + 1} muestra un plan de delivery sin reservas`, /delivery/.test(visiblePlanFeatures) && /pedido/.test(visiblePlanFeatures) && !/alojamiento|hotel|reserva|anfitrion|vuelo/.test(visiblePlanFeatures) && /sin reservas ni alojamientos/i.test(visiblePlan.summary));
   expect(`VelozYa ${index + 1} usa memoria aislada de delivery`, detectBusinessVertical(deliveryPrompt) === "delivery");
 }
 

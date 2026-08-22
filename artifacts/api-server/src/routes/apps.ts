@@ -128,7 +128,7 @@ import { logger } from "../lib/logger";
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "../lib/agentMemory";
 import { formatMemoryBlock, type AgentMemoryContext } from "../lib/agentMemoryContext";
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
-import { TEMPLATES, buildAgentTemplateContextBlock } from "../lib/templates";
+import { TEMPLATES, buildAgentTemplateContextBlock, buildDeterministicPlanPreview } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
 import { notifyAdminAppGenerated, notifyAdminCreditsLow, notifyAdminAppDeployed } from "../lib/notify";
@@ -5942,38 +5942,15 @@ router.post("/apps/feedback", requireAuth, async (req: any, res: any) => {
 // confirme qué quiere antes de gastar créditos
 router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
   try {
-    const { prompt } = req.body ?? {};
+    const { prompt, kind } = req.body ?? {};
     if (!prompt || typeof prompt !== "string") {
       res.status(400).json({ error: "prompt requerido" });
       return;
     }
 
-    // La vista previa solo orienta al usuario: no debe bloquear la creación
-    // durante minutos esperando a un modelo. Usamos un resumen determinista;
-    // el generador real conserva el análisis de IA al iniciar el trabajo.
-    const normalizedPrompt = prompt.replace(/\s+/g, " ").trim();
-    const reservationIntent = /\b(booking|hotel|alojamiento|reserva|viaje|marketplace)\b/i.test(normalizedPrompt);
-    const backendNeeded = /\b(auth|login|usuario|pago|stripe|base de datos|\bbd\b|api|reserva|booking|panel)\b/i.test(normalizedPrompt);
-    const title = reservationIntent ? "Marketplace de reservas" : "Nueva aplicación digital";
-    const included = reservationIntent
-      ? ["Búsqueda y filtros", "Fichas de alojamiento", "Flujo de reserva", "Panel de gestión"]
-      : ["Experiencia principal", "Navegación responsive", "Datos de ejemplo", "Panel operativo"];
-    const extras = reservationIntent
-      ? [
-          { id: "favoritos", label: "Favoritos", why: "Permite guardar opciones para compararlas después." },
-          { id: "mensajeria", label: "Mensajería", why: "Facilita la comunicación entre clientes y proveedores." },
-        ]
-      : [{ id: "analitica", label: "Analítica básica", why: "Ayuda a entender el uso de la aplicación." }];
-    const plan = {
-      title,
-      summary: reservationIntent
-        ? "Una primera versión funcional de marketplace de reservas, inspirada en el tipo de flujo solicitado y con identidad propia."
-        : `Una primera versión funcional basada en: ${normalizedPrompt.slice(0, 180)}${normalizedPrompt.length > 180 ? "…" : ""}`,
-      included,
-      extras,
-      estimatedPages: reservationIntent ? 5 : 4,
-      backendNeeded,
-    };
+    // La vista previa comparte selector con el generador real. Así, las
+    // exclusiones expresas del cliente no se convierten en falsos dominios.
+    const plan = buildDeterministicPlanPreview(prompt.replace(/\s+/g, " ").trim(), kind);
     return res.json({ ok: true, plan });
   } catch (err: any) {
     logger.error({ err }, "plan-preview error");

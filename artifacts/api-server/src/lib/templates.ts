@@ -659,6 +659,63 @@ export interface TemplateContextOptions {
   uiLanguage?: string;
 }
 
+export interface DeterministicPlanPreview {
+  title: string;
+  summary: string;
+  included: string[];
+  extras: Array<{ id: string; label: string; why: string }>;
+  estimatedPages: number;
+  backendNeeded: boolean;
+}
+
+/**
+ * El preplan visible debe usar la misma clasificación que los agentes. Tener
+ * reglas locales en la ruta HTTP provocó que una exclusión de "alojamiento"
+ * se interpretara erróneamente como una solicitud de reservas.
+ */
+export function buildDeterministicPlanPreview(prompt: string, kind?: string): DeterministicPlanPreview {
+  const blueprint = selectAgentGenerationBlueprint(prompt, kind);
+  const normalizedPrompt = normalizeForTemplateSearch(prompt);
+  const backendRequested = /\b(?:auth|login|usuario|pago|stripe|base de datos|\bbd\b|api|panel)\b/.test(normalizedPrompt);
+
+  if (blueprint.id === "local-delivery") {
+    return {
+      title: "Marketplace de delivery",
+      summary: "Una primera versión funcional de delivery urbano con comercios locales, productos, pedidos y reparto demostrativo; sin reservas ni alojamientos.",
+      included: ["Búsqueda por zona y comercios", "Categorías, carta y productos", "Carrito y pedido demo", "Seguimiento y paneles operativos"],
+      extras: [
+        { id: "favoritos", label: "Favoritos", why: "Permite guardar comercios y productos para pedirlos de nuevo." },
+        { id: "promociones", label: "Promociones demo", why: "Permite probar códigos promocionales sin procesar ningún cobro real." },
+      ],
+      estimatedPages: 8,
+      backendNeeded: true,
+    };
+  }
+
+  if (blueprint.id === "accommodation-marketplace") {
+    return {
+      title: "Marketplace de reservas",
+      summary: "Una primera versión funcional de marketplace de reservas, inspirada en el tipo de flujo solicitado y con identidad propia.",
+      included: ["Búsqueda y filtros", "Fichas de alojamiento", "Flujo de reserva", "Panel de gestión"],
+      extras: [
+        { id: "favoritos", label: "Favoritos", why: "Permite guardar opciones para compararlas después." },
+        { id: "mensajeria", label: "Mensajería", why: "Facilita la comunicación entre clientes y proveedores." },
+      ],
+      estimatedPages: 5,
+      backendNeeded: true,
+    };
+  }
+
+  return {
+    title: blueprint.name,
+    summary: `Una primera versión funcional basada en el patrón de ${blueprint.name.toLowerCase()}, adaptada al encargo con marca e identidad propias.`,
+    included: blueprint.recommendedStructure.slice(0, 4),
+    extras: [{ id: "analitica", label: "Analítica básica", why: "Ayuda a entender el uso de la aplicación." }],
+    estimatedPages: Math.max(4, Math.min(blueprint.recommendedStructure.length, 8)),
+    backendNeeded: backendRequested || blueprint.appliesToKinds.includes("fullstack"),
+  };
+}
+
 function getRelatedPublicTemplateIds(blueprint: AgentGenerationBlueprint, kind?: string): string {
   const selectedKind = kind as TemplateKind;
   const relatedTemplateIds: Record<string, string[]> = {
