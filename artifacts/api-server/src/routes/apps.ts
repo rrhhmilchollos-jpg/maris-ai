@@ -3210,14 +3210,10 @@ async function runValidatePatchLoop(
   let finalFrontend = normalizeGeneratedFrontendBundle(initialBundle);
   const noop: AgentLog = () => {};
   const emit = log ?? noop;
-
-  // ── testing-agent: inicio ────────────────────────────────────────────
-  emit("testing", "🧪 testing-agent activo — escaneando bundle en busca de errores…");
-  onProgress?.({
-    phase: "testing",
-    progress: Math.min(baseProgressStart, 80),
-    note: "🧪 testing-agent: analizando código generado…",
-  });
+  // El Testing Agent no es una fase decorativa. La validación determinista se
+  // ejecuta siempre que el plan lo permita, pero el agente visible solo se
+  // anuncia después de encontrar un defecto verificable que vaya a reparar.
+  let testingAgentAnnounced = false;
 
   if (!phaseGates.validate) {
     emit("testing", "△ Testing Agent: validación omitida por plan reducido.", "warn");
@@ -3250,11 +3246,10 @@ async function runValidatePatchLoop(
 
     if (validation.ok && combined.length === 0) {
       onProgress?.({
-        phase: "testing",
+        phase: "validating",
         progress: Math.min(baseProgress + 1, 93),
-        note: `✅ Testing Agent: sin errores detectados (${validation.filesAnalyzed} archivo(s)).`,
+        note: `✅ Build verificado (${validation.filesAnalyzed} archivo(s)).`,
       });
-      emit("testing", `✅ Sin errores — ${validation.filesAnalyzed} archivo(s) validado(s) correctamente.`);
       emit("validator", `✓ build OK · ${validation.filesAnalyzed} archivo${validation.filesAnalyzed === 1 ? "" : "s"}`);
       if (lastErrorMessage && lastPatchedBundle) {
         const fixHint = extractFixHint(lastPatchedBundle, lastErrorMessage);
@@ -3268,6 +3263,16 @@ async function runValidatePatchLoop(
         }).catch(() => {});
       }
       break;
+    }
+
+    if (!testingAgentAnnounced) {
+      testingAgentAnnounced = true;
+      onProgress?.({
+        phase: "testing",
+        progress: Math.min(baseProgress + 1, 92),
+        note: `🧪 Testing Agent: ${combined.length} error(es) verificable(s) detectado(s).`,
+      });
+      emit("testing", "🧪 Testing Agent: encontró errores verificables y activa una reparación limitada.", "warn");
     }
 
     if (iter === MAX_ITERATIONS) {
@@ -4739,13 +4744,16 @@ export async function generateApp(
         return qualityCheckedFrontend;
       });
     } else if (!initialEditValidation.ok) {
-      await log("system", "La edición contiene un error de build, pero su alcance no permite una reparación automática segura. Se conserva la versión anterior hasta una revisión explícita.", "warn");
+      await log("system", "La edición contiene un error de build verificable. Se activa una reparación limitada en memoria; la versión actual solo se sustituirá si el resultado final compila correctamente.", "warn");
     } else if (!execPlan.phases.includes("validate")) {
       await log("system", "Plan dice saltar validación (alcance reducido) — se omiten QA, Testing Agent y comprobación de build en esta edición.", "warn");
     } else {
       await log("system", "Build correcto: el Testing Agent permanece oculto porque no hay ningún error verificable que reparar.", "info");
     }
 
+    const repairGates = !initialEditValidation.ok
+      ? { validate: true, patch: true }
+      : { validate: execPlan.phases.includes("validate"), patch: execPlan.phases.includes("patch") };
     const fixedFrontend = explicitLiteralEdit
       ? qualityCheckedFrontend
       : await runValidatePatchLoop(
@@ -4755,7 +4763,7 @@ export async function generateApp(
         70,
         language,
         log,
-        { validate: execPlan.phases.includes("validate"), patch: execPlan.phases.includes("patch") },
+        repairGates,
         agentModelPlan,
         undefined,
         (summary) => { buildErrorCapture = summary; },

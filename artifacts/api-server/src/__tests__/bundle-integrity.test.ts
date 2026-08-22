@@ -39,6 +39,14 @@ import React from "react";
 export default function App() { return null; }
 `;
 
+const syntaxErrorBundle = `// === FILE: src/App.tsx ===
+import React from "react";
+export default function App() {
+  const state = true {
+  return <main>Esta sintaxis no es válida</main>;
+}
+`;
+
 async function expectRejected(name: string, bundle: string, fragment: string) {
   const report = await validateBundle(bundle);
   assert.equal(report.ok, false, `${name}: el bundle debía rechazarse`);
@@ -54,6 +62,7 @@ async function main() {
   await expectRejected("placeholder de entrega", placeholderBundle, "Visible internal placeholder");
   await expectRejected("archivo fuente vacío", emptySourceBundle, "Empty source file");
   await expectRejected("raíz React sin interfaz", blankRootBundle, "React root returns no visible interface");
+  await expectRejected("error de sintaxis de edición", syntaxErrorBundle, "Expected");
 
   console.log("\nLa puerta de integridad bloquea resultados vacíos, incompletos y no renderizables.");
 }

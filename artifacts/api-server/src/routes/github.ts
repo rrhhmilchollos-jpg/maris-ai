@@ -9,6 +9,7 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { requireAuth } from "../lib/auth";
 import { connectDB } from "../lib/db";
 import { User, GeneratedApp } from "@workspace/db/schema";
@@ -74,6 +75,7 @@ const APP_URL = process.env.APP_URL ?? "https://www.marisai.es";
 const DEFAULT_CALLBACK_BASE = "https://www.marisai.es";
 const configuredCallbackBase = process.env.GITHUB_CALLBACK_BASE_URL || process.env.PUBLIC_API_URL || process.env.API_URL || DEFAULT_CALLBACK_BASE;
 const GITHUB_CALLBACK_URL = `${configuredCallbackBase.replace(/\/$/, "")}/api/github/callback`;
+const GITHUB_OAUTH_STATE_SECRET = process.env.GITHUB_OAUTH_STATE_SECRET || process.env.JWT_SECRET || GITHUB_CLIENT_SECRET;
 
 // Evita que un doble clic, una reconexión de red o dos pestañas creen commits
 // concurrentes sobre el mismo proyecto dentro de la misma instancia de API.
@@ -106,10 +108,31 @@ function safeReturnTo(raw?: string): string {
   return raw.slice(0, 300);
 }
 
+function signGitHubState(payload: string): string {
+  return createHmac("sha256", GITHUB_OAUTH_STATE_SECRET).update(payload).digest("base64url");
+}
+
 function buildGitHubAuthorizeUrl(userId: string, returnTo?: string): string {
-  const state = Buffer.from(JSON.stringify({ userId, ts: Date.now(), returnTo: safeReturnTo(returnTo) })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ userId, ts: Date.now(), returnTo: safeReturnTo(returnTo) })).toString("base64url");
+  const state = `${payload}.${signGitHubState(payload)}`;
   const scope = "repo,read:user,user:email";
   return `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(GITHUB_CALLBACK_URL)}&scope=${encodeURIComponent(scope)}&state=${state}`;
+}
+
+function decodeVerifiedGitHubState(state: string): { userId: string; ts: number; returnTo: string } | null {
+  const [payload, signature, ...extra] = state.split(".");
+  if (!payload || !signature || extra.length > 0) return null;
+  const expected = signGitHubState(payload);
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (signatureBuffer.length !== expectedBuffer.length || !timingSafeEqual(signatureBuffer, expectedBuffer)) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (!decoded?.userId || typeof decoded.ts !== "number") return null;
+    return { userId: String(decoded.userId), ts: decoded.ts, returnTo: safeReturnTo(decoded.returnTo) };
+  } catch {
+    return null;
+  }
 }
 
 // ─── Paso 1A: URL OAuth para frontends con Bearer token (Clerk) ───────────────
@@ -149,10 +172,10 @@ router.get("/github/callback", async (req, res) => {
   let userId: string;
   let returnTo = "/dashboard";
   try {
-    const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf8"));
+    const decoded = decodeVerifiedGitHubState(state);
+    if (!decoded) throw new Error("invalid state signature");
     userId = decoded.userId;
-    returnTo = safeReturnTo(decoded.returnTo);
-    if (!userId) throw new Error("userId vacío");
+    returnTo = decoded.returnTo;
     // Verificar que el state no tiene más de 10 minutos
     if (Date.now() - decoded.ts > 10 * 60 * 1000) {
       return res.redirect(`${APP_URL}${returnTo}?github_error=expired`);
@@ -432,7 +455,8 @@ export async function githubPushHandler(req: Request, res: Response) {
     });
     if (!treeRes.ok) {
       const treeErr = (await treeRes.json()) as any;
-      return res.status(500).json({ error: `Error al crear árbol: ${treeErr.message ?? "desconocido"}` });
+      logger.error({ appId, status: treeRes.status, message: treeErr?.message }, "Error al crear árbol de GitHub");
+      return res.status(502).json({ error: "github_tree_create_failed", message: "GitHub no pudo preparar el árbol de archivos. No se creó ningún commit incompleto; reinténtalo en unos minutos." });
     }
     const treeData = (await treeRes.json()) as any;
 
@@ -451,7 +475,8 @@ export async function githubPushHandler(req: Request, res: Response) {
     });
     if (!commitRes2.ok) {
       const commitErr = (await commitRes2.json()) as any;
-      return res.status(500).json({ error: `Error al crear commit: ${commitErr.message ?? "desconocido"}` });
+      logger.error({ appId, status: commitRes2.status, message: commitErr?.message }, "Error al crear commit de GitHub");
+      return res.status(502).json({ error: "github_commit_create_failed", message: "GitHub no pudo crear el commit. El repositorio no se sobrescribió; reinténtalo en unos minutos." });
     }
     const commitData2 = (await commitRes2.json()) as any;
 

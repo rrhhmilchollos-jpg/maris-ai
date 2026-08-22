@@ -225,6 +225,21 @@ const ALLOWED_ORIGIN_PATTERNS: RegExp[] = [
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
 ];
 
+// La vista previa de SPAX se ejecuta en un iframe con origen opaco. Solo el
+// formulario público de colaboración necesita completar su preflight desde
+// ese contexto; no se abre CORS para rutas autenticadas ni otros endpoints.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const isSpaxCollaborationPreflight = req.method === "OPTIONS"
+    && req.path === "/api/spax-auth/collaboration-requests"
+    && req.headers.origin === "null";
+  if (!isSpaxCollaborationPreflight) return next();
+  res.setHeader("Access-Control-Allow-Origin", "null");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Vary", "Origin");
+  return res.status(204).send();
+});
+
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) { callback(null, true); return; }

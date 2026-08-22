@@ -23,6 +23,38 @@ import {
 
 const router = Router();
 const DEPLOY_COST_CREDITS = 50;
+const DEPLOYMENT_LOCK_TTL_MS = 30 * 60 * 1000;
+
+function publicDeploymentError(action: "deploy" | "redeploy"): string {
+  return action === "redeploy"
+    ? "No se pudo actualizar la publicación. La versión activa anterior sigue disponible y el detalle técnico se registró para revisión."
+    : "No se pudo completar la publicación. Tu proyecto y cualquier versión publicada anterior permanecen intactos; el detalle técnico se registró para revisión.";
+}
+
+async function reserveDeploymentSlot(opts: { appId: string; userId: string }) {
+  const staleBefore = new Date(Date.now() - DEPLOYMENT_LOCK_TTL_MS);
+  return GeneratedApp.findOneAndUpdate(
+    {
+      _id: opts.appId,
+      userId: opts.userId,
+      $or: [
+        { deploymentStatus: { $ne: "deploying" } },
+        { deployStartedAt: { $exists: false } },
+        { deployStartedAt: { $lt: staleBefore } },
+      ],
+    },
+    {
+      $set: {
+        deploymentStatus: "deploying",
+        deploymentError: null,
+        deployError: null,
+        deployPhase: "health_check",
+        deployStartedAt: new Date(),
+      },
+    },
+    { new: true },
+  );
+}
 
 function getAuthenticatedUserId(req: Request): string | undefined {
   return (req as any).userId || (req as any).auth?.userId;
@@ -50,19 +82,42 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
     const userData = await User.findById(userId).lean();
     if (!userData) return res.status(404).json({ error: "User not found" });
 
-    const charge = await chargeDeployCredits(req, userId, appData.title);
-    if (!charge.ok) {
-      return res.status(402).json({ error: "Créditos insuficientes", required: DEPLOY_COST_CREDITS, current: userData.credits });
+    const previousStatus = appData.deploymentStatus || "not_deployed";
+    const reservation = await reserveDeploymentSlot({ appId: String(appId), userId });
+    if (!reservation) {
+      return res.status(409).json({
+        error: "Ya hay una publicación en curso para esta app. Espera a que finalice antes de volver a intentarlo.",
+        code: "DEPLOYMENT_IN_PROGRESS",
+      });
     }
 
-    await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "deploying", deploymentError: null });
+    const charge = await chargeDeployCredits(req, userId, appData.title);
+    if (!charge.ok) {
+      await GeneratedApp.updateOne(
+        { _id: appId, userId, deploymentStatus: "deploying" },
+        { $set: { deploymentStatus: previousStatus, deployPhase: null, deployError: null } },
+      );
+      return res.status(402).json({ error: "Créditos insuficientes", required: DEPLOY_COST_CREDITS, current: userData.credits });
+    }
 
     const deploymentResult = await deployAppToVercel({ appId: String(appId), userId, log: logger });
 
     if (!deploymentResult.ok) {
-      const errorMsg = "failure" in deploymentResult ? JSON.stringify(deploymentResult.failure) : "Unknown error";
-      await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "failed", deploymentError: errorMsg });
-      return res.status(500).json({ success: false, error: errorMsg });
+      const internalError = "failure" in deploymentResult ? JSON.stringify(deploymentResult.failure) : "Unknown deployment error";
+      const clientError = publicDeploymentError("deploy");
+      logger.warn({ appId, userId, internalError }, "Deploy failed; preserving the prior published version");
+      await GeneratedApp.updateOne(
+        { _id: appId, userId, deploymentStatus: "deploying" },
+        {
+          $set: {
+            deploymentStatus: previousStatus === "deployed" ? "deployed" : "failed",
+            deploymentError: clientError,
+            deployError: clientError,
+            deployPhase: "error",
+          },
+        },
+      );
+      return res.status(502).json({ success: false, error: clientError, code: "DEPLOY_FAILED" });
     }
 
     const { url, projectId } = deploymentResult.result;
@@ -114,7 +169,16 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
     return res.json({ success: true, deploymentUrl: finalUrl, subdomain, customDomain, projectId, creditsCharged: DEPLOY_COST_CREDITS });
   } catch (error) {
     logger.error({ error }, "Deployment error");
-    return res.status(500).json({ error: "Internal server error" });
+    const appId = String(req.params?.appId || "");
+    const userId = getAuthenticatedUserId(req);
+    const clientError = publicDeploymentError("deploy");
+    if (appId && userId) {
+      await GeneratedApp.updateOne(
+        { _id: appId, userId, deploymentStatus: "deploying" },
+        { $set: { deploymentStatus: "failed", deploymentError: clientError, deployError: clientError, deployPhase: "error" } },
+      ).catch(() => {});
+    }
+    return res.status(500).json({ error: clientError, code: "DEPLOY_UNEXPECTED_ERROR" });
   }
 });
 
@@ -128,13 +192,39 @@ router.post("/apps/:appId/redeploy", requireAuth, async (req: Request, res: Resp
     if (!appData.vercelProjectId) return res.status(400).json({ error: "App has not been deployed yet" });
     const userData = await User.findById(userId).lean();
     if (!userData) return res.status(404).json({ error: "User not found" });
+    const previousStatus = appData.deploymentStatus || "deployed";
+    const reservation = await reserveDeploymentSlot({ appId: String(appId), userId });
+    if (!reservation) {
+      return res.status(409).json({
+        error: "Ya hay una actualización en curso para esta app. Espera a que finalice antes de volver a intentarlo.",
+        code: "REDEPLOYMENT_IN_PROGRESS",
+      });
+    }
+
     const charge = await chargeDeployCredits(req, userId, appData.title);
-    if (!charge.ok) return res.status(402).json({ error: "Créditos insuficientes", required: DEPLOY_COST_CREDITS, current: userData.credits });
-    await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "deploying", deploymentError: null });
+    if (!charge.ok) {
+      await GeneratedApp.updateOne(
+        { _id: appId, userId, deploymentStatus: "deploying" },
+        { $set: { deploymentStatus: previousStatus, deployPhase: null, deployError: null } },
+      );
+      return res.status(402).json({ error: "Créditos insuficientes", required: DEPLOY_COST_CREDITS, current: userData.credits });
+    }
     const redeployResult = await redeployVercelProject(appData.vercelProjectId);
     if (!redeployResult.success) {
-      await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "failed", deploymentError: redeployResult.error });
-      return res.status(500).json({ success: false, error: redeployResult.error });
+      const clientError = publicDeploymentError("redeploy");
+      logger.warn({ appId, userId, redeployError: redeployResult.error }, "Re-deploy failed; preserving the prior published version");
+      await GeneratedApp.updateOne(
+        { _id: appId, userId, deploymentStatus: "deploying" },
+        {
+          $set: {
+            deploymentStatus: previousStatus === "deployed" ? "deployed" : "failed",
+            deploymentError: clientError,
+            deployError: clientError,
+            deployPhase: "error",
+          },
+        },
+      );
+      return res.status(502).json({ success: false, error: clientError, code: "REDEPLOY_FAILED" });
     }
     const deploymentUrl = appData.customDomain
       ? `https://${appData.customDomain}`
@@ -143,7 +233,16 @@ router.post("/apps/:appId/redeploy", requireAuth, async (req: Request, res: Resp
     return res.json({ success: true, deploymentUrl, creditsCharged: DEPLOY_COST_CREDITS });
   } catch (error) {
     logger.error({ error }, "Redeployment error");
-    return res.status(500).json({ error: "Internal server error" });
+    const appId = String(req.params?.appId || "");
+    const userId = getAuthenticatedUserId(req);
+    const clientError = publicDeploymentError("redeploy");
+    if (appId && userId) {
+      await GeneratedApp.updateOne(
+        { _id: appId, userId, deploymentStatus: "deploying" },
+        { $set: { deploymentStatus: "failed", deploymentError: clientError, deployError: clientError, deployPhase: "error" } },
+      ).catch(() => {});
+    }
+    return res.status(500).json({ error: clientError, code: "REDEPLOY_UNEXPECTED_ERROR" });
   }
 });
 

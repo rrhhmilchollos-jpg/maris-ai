@@ -34,9 +34,10 @@ const polling = readAppforge("lib/job-polling.ts");
 
 check(
   "Los agentes de reparación y autofix visual están desactivados por defecto",
-  /AUTOMATED_REPAIR_ENABLED\s*=\s*process\.env\.MARIS_AUTOMATED_REPAIR_ENABLED\s*===\s*\"true\"/.test(automationPolicy)
-    && /VISUAL_AUTOFIX_ENABLED\s*=\s*process\.env\.MARIS_VISUAL_AUTOFIX_ENABLED\s*===\s*\"true\"/.test(automationPolicy)
-    && /if \(!AUTOMATED_REPAIR_ENABLED\)/.test(tester),
+  /AUTOMATED_REPAIR_ENABLED\s*=\s*process\.env\.MARIS_AUTOMATED_REPAIR_ENABLED\s*===\s*"true"/.test(automationPolicy)
+    && /VISUAL_AUTOFIX_ENABLED\s*=\s*process\.env\.MARIS_VISUAL_AUTOFIX_ENABLED\s*===\s*"true"/.test(automationPolicy)
+    && /if \(!AUTOMATED_REPAIR_ENABLED\s*&&\s*!options\.allowVerifiedAutoRepair\)/.test(tester)
+    && /if \(!AUTOMATED_REPAIR_ENABLED\s*&&\s*options\.allowVerifiedAutoRepair\)/.test(tester),
 );
 
 check(
