@@ -1497,77 +1497,75 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               </div>
             </div>
           ) : (
-            <div className="space-y-2 md:space-y-3">
+            <div className="mx-auto w-full max-w-[860px] space-y-6 pb-4">
               {visibleMessages.map((message, index) => {
                 const isUserMessage = message.role === "user";
                 const key = message.id ?? `${message.role}-${index}`;
-                const isOld = index < visibleMessages.length - 4; // los últimos 4 se ven completos
                 const rawContent = String(message.content || "").trim();
-                // Truncar mensajes antiguos y prompts largos del usuario
-                const MAX_CHARS = isOld ? 120 : isUserMessage ? 300 : 600;
-                const truncated = rawContent.length > MAX_CHARS;
-                const displayContent = truncated ? rawContent.slice(0, MAX_CHARS) + "…" : rawContent;
-
-                if (isOld && isUserMessage) {
-                  // Mensajes de usuario antiguos: línea compacta
-                  return (
-                    <div key={key} className="flex justify-end">
-                      <div className="max-w-[75%] flex items-center gap-1.5 bg-[#7c3aed]/20 border border-[#7c3aed]/20 rounded-xl px-3 py-1.5">
-                        <span className="text-[11px] text-white/40 shrink-0">{formatMessageTime(message.createdAt)}</span>
-                        <span className="text-[11px] text-white/60 truncate">{rawContent.slice(0, 80)}{rawContent.length > 80 ? "…" : ""}</span>
-                      </div>
-                    </div>
-                  );
-                }
-
-                if (isOld && !isUserMessage) {
-                  // Respuestas antiguas de la IA: línea colapsada con ✓
-                  return (
-                    <div key={key} className="flex items-center gap-2 px-1">
-                      <div className="w-4 h-4 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0">
-                        <span className="text-[8px] text-violet-400">✓</span>
-                      </div>
-                      <div className="flex-1 h-px bg-white/[0.04]" />
-                      <span className="text-[10px] text-white/20 shrink-0">{formatMessageTime(message.createdAt)}</span>
-                    </div>
-                  );
-                }
+                const isErrorMessage = !isUserMessage && /(no pude completar|error en la generación|no se pudo)/i.test(rawContent);
 
                 return (
-                  <div key={key} className={`flex items-start gap-2 md:gap-3 ${isUserMessage ? "justify-end" : "justify-start"}`}>
-                    {!isUserMessage && (
-                      <div className="relative mt-0.5 shrink-0">
-                        <div className="absolute inset-0 rounded-full bg-[#7c3aed]/25 blur-md" />
-                        <div className="relative grid h-7 w-7 md:h-8 md:w-8 place-items-center rounded-full border border-[#8b5cf6]/25 bg-[#111827]">
-                          <Bot className="h-3.5 w-3.5 md:h-4 md:w-4 text-white" />
+                  <div key={key} className={`flex ${isUserMessage ? "justify-end" : "justify-start"}`}>
+                    {isUserMessage ? (
+                      <div className="max-w-[86%] md:max-w-[72%]">
+                        <div className="rounded-2xl rounded-br-md border border-[#a78bfa]/20 bg-gradient-to-br from-[#7c3aed] to-[#5724b7] px-4 py-3 text-[13px] leading-relaxed text-white shadow-[0_12px_30px_rgba(91,33,182,0.24)] md:text-[14px]">
+                          <p className="whitespace-pre-wrap break-words">{rawContent}</p>
+                        </div>
+                        <div className="mt-1.5 flex items-center justify-end gap-2 pr-1 text-[10px]">
+                          <span className="font-semibold text-[#c4b5fd]">{firstName}</span>
+                          <span className="text-white/25">{formatMessageTime(message.createdAt)}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex max-w-[92%] items-start gap-3 md:max-w-[82%]">
+                        <div className="relative mt-1 shrink-0">
+                          <div className="absolute inset-0 rounded-xl bg-[#7c3aed]/25 blur-md" />
+                          <div className="relative grid h-8 w-8 place-items-center rounded-xl border border-[#a78bfa]/25 bg-[#141126]">
+                            <Bot className="h-4 w-4 text-[#c4b5fd]" />
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="mb-1.5 flex items-center gap-2 text-[10px]">
+                            <span className="font-extrabold uppercase tracking-[0.16em] text-[#c4b5fd]">Maris AI</span>
+                            <span className="text-white/25">{formatMessageTime(message.createdAt)}</span>
+                          </div>
+                          <div className={`rounded-2xl rounded-tl-md border px-4 py-3 text-[13px] leading-relaxed md:text-[14px] ${
+                            isErrorMessage
+                              ? "border-red-400/25 bg-red-500/[0.07] text-red-100"
+                              : "border-white/[0.08] bg-white/[0.035] text-white/80"
+                          }`}>
+                            {!isErrorMessage && rawContent.includes("ENGINE_EXEC activado") && (
+                              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.15em] text-emerald-200">
+                                <Shield className="h-3 w-3" /> ENGINE_EXEC
+                              </div>
+                            )}
+                            <p className="whitespace-pre-wrap break-words">{rawContent}</p>
+                          </div>
                         </div>
                       </div>
                     )}
-                    <div className={`max-w-[85%] md:max-w-[78%] space-y-1 ${isUserMessage ? "items-end text-right" : "items-start"}`}>
-                      <div className={`whitespace-pre-wrap rounded-xl px-3 py-2 md:px-4 md:py-2.5 text-[13px] md:text-[14px] leading-relaxed ${isUserMessage ? "bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-white shadow-[0_4px_15px_rgba(124,58,237,0.3)]" : "border border-white/[0.07] bg-[#1b2230] text-white/90"}`}>
-                        {!isUserMessage && rawContent.includes("ENGINE_EXEC activado") && (
-                          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.15em] text-emerald-200">
-                            <Shield className="h-3 w-3" /> ENGINE_EXEC
-                          </div>
-                        )}
-                        {displayContent}
-                      </div>
-                      <div className={`px-1 flex items-center gap-2 ${isUserMessage ? "justify-end" : "justify-start"}`}>
-                        <p className={`text-[10px] font-semibold ${isUserMessage ? "text-white/50" : "text-[#a78bfa]"}`}>{isUserMessage ? firstName : "Maris AI"}</p>
-                        <p className="text-[10px] text-white/25">{formatMessageTime(message.createdAt)}</p>
-                      </div>
-                    </div>
                   </div>
                 );
               })}
             </div>
           )}
-          {/* Pipeline de agentes en vivo + quema de créditos (estilo Emergent.sh) */}
-          {isWorking && job && <AgentStatusPipeline job={job} />}
-          {/* Agent logs inline */}
+          {/* Estado real del pipeline y cronología de eventos de agentes. */}
+          {isWorking && job && (
+            <div className="mx-auto mt-5 w-full max-w-[860px]">
+              <AgentStatusPipeline job={job} />
+            </div>
+          )}
           {isWorking && job && jobLogs && jobLogs.length > 0 && (
-            <div className="mt-4 space-y-2">
-              {jobLogs.slice(-8).map((log: any, idx: number) => {
+            <div className="mx-auto mt-5 w-full max-w-[860px] rounded-2xl border border-white/[0.07] bg-[#0b0e17]/80 p-3 md:p-4">
+              <div className="mb-3 flex items-center justify-between gap-3 px-1">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Actividad de agentes</p>
+                  <p className="mt-1 text-[12px] text-white/55">Eventos reales del trabajo actual, en orden cronológico.</p>
+                </div>
+                <span className="shrink-0 rounded-full border border-[#8b5cf6]/25 bg-[#7c3aed]/10 px-2.5 py-1 text-[10px] font-bold text-[#c4b5fd]">{jobLogs.length} eventos</span>
+              </div>
+              <div className="relative space-y-2 before:absolute before:bottom-3 before:left-[18px] before:top-3 before:w-px before:bg-white/[0.08]">
+              {jobLogs.slice(-12).map((log: any, idx: number) => {
                 const agentKey = (log.agent || "system").toLowerCase();
                 const agentCfg: Record<string, { label: string; color: string; bg: string; border: string; Icon: any }> = {
                   frontend:     { label: "FRONTEND",     color: "text-emerald-400", bg: "bg-emerald-500/10",  border: "border-emerald-500/25", Icon: Code },
@@ -1580,39 +1578,32 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   qa:           { label: "QA",           color: "text-sky-400",     bg: "bg-sky-500/10",      border: "border-sky-500/25",     Icon: Terminal },
                   patcher:      { label: "PATCHER",      color: "text-teal-400",    bg: "bg-teal-500/10",     border: "border-teal-500/25",    Icon: Code },
                   validator:    { label: "VALIDATOR",    color: "text-cyan-400",    bg: "bg-cyan-500/10",     border: "border-cyan-500/25",    Icon: Shield },
-                  memory:       { label: "MEMORY",       color: "text-indigo-400",  bg: "bg-indigo-500/10",   border: "border-indigo-500/25",  Icon: Cpu },
-                  system:       { label: "SYSTEM",       color: "text-red-400",     bg: "bg-red-500/10",      border: "border-red-500/25",     Icon: AlertCircle },
+                  memory:       { label: "MEMORY",       color: "text-indigo-400",  bg: "bg-indigo-500/10",   border: "border-indigo-500/25",   Icon: Cpu },
+                  system:       { label: "SYSTEM",       color: "text-white/55",    bg: "bg-white/[0.05]",    border: "border-white/[0.12]",   Icon: AlertCircle },
                 };
                 const cfg = agentCfg[agentKey] || agentCfg.system;
-                const isActive = idx === jobLogs.slice(-8).length - 1 && isWorking;
-                const isError = log.level === "error" || agentKey === "system";
+                const isActive = idx === jobLogs.slice(-12).length - 1 && isWorking;
+                const isError = log.level === "error";
                 return (
-                  <div key={log.id || idx} className={`flex items-center gap-3 rounded-xl border px-3 py-2 md:px-3.5 md:py-2.5 ${
-                    isError ? "border-red-500/30 bg-red-500/8" :
-                    isActive ? "border-[#7c3aed]/40 bg-[#7c3aed]/8" :
-                    `${cfg.border} ${cfg.bg}`
-                  }`}>
-                    <div className={`grid h-7 w-7 md:h-8 md:w-8 shrink-0 place-items-center rounded-lg border ${isError ? "border-red-500/30 bg-red-500/15" : `${cfg.border} ${cfg.bg}`}`}>
+                  <div key={log.id || idx} className="relative flex gap-3 pl-10">
+                    <div className={`absolute left-0 top-3 z-10 grid h-9 w-9 place-items-center rounded-xl border ${isError ? "border-red-500/35 bg-red-500/15" : `${cfg.border} ${cfg.bg}`}`}>
                       <cfg.Icon className={`h-3.5 w-3.5 md:h-4 md:w-4 ${isError ? "text-red-400" : cfg.color}`} />
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className={`min-w-0 flex-1 rounded-xl border px-3.5 py-3 ${
+                      isError ? "border-red-500/30 bg-red-500/[0.07]" : isActive ? "border-[#8b5cf6]/35 bg-[#7c3aed]/[0.08]" : "border-white/[0.06] bg-white/[0.025]"
+                    }`}>
                       <div className="flex items-center gap-2">
-                        <span className={`text-[10px] md:text-[11px] font-black tracking-widest ${isError ? "text-red-400" : cfg.color}`}>{cfg.label}</span>
-                        {log.file && <span className="text-[10px] md:text-[11px] text-white/35 font-mono truncate">{log.file}</span>}
+                        <span className={`text-[10px] font-black tracking-[0.15em] ${isError ? "text-red-400" : cfg.color}`}>{cfg.label}</span>
+                        {log.file && <span className="min-w-0 truncate text-[10px] text-white/30 font-mono">{log.file}</span>}
+                        <span className="ml-auto shrink-0 text-[10px] text-white/25 font-mono">{formatMessageTime(log.createdAt)}</span>
+                        {isActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />}
                       </div>
-                      {log.message && <p className={`text-[11px] md:text-[12px] leading-snug truncate ${isError ? "text-red-300" : "text-white/60"}`}>{log.message}</p>}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="hidden md:inline text-[11px] text-white/25 font-mono">{formatMessageTime(log.createdAt)}</span>
-                      {isActive ? (
-                        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-                      ) : (
-                        <ChevronRight className="h-3.5 w-3.5 text-white/20" />
-                      )}
+                      {log.message && <p className={`mt-1.5 break-words text-[12px] leading-relaxed md:text-[13px] ${isError ? "text-red-200" : "text-white/65"}`}>{log.message}</p>}
                     </div>
                   </div>
                 );
               })}
+              </div>
             </div>
           )}
           {isWorking && job && (!jobLogs || jobLogs.length === 0) && (

@@ -65,7 +65,7 @@ export function AgentStatusPipeline({ job }: { job: any }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-white/5 border border-white/10 mb-3">
       <div className="flex items-center gap-2">
-        {STAGES.map(({ key, label, Icon }) => {
+        {STAGES.filter(({ key }) => key !== "testing_agent" || stage === "testing_agent").map(({ key, label, Icon }) => {
           const active = key === stage;
           const warn = active && isWarning;
           return (
