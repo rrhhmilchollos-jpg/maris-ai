@@ -643,6 +643,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     connectDomainMutation.mutate({ id, domain: trimmed });
   };
 
+  const isTerminalJob = job?.status === "succeeded"
+    || job?.status === "failed"
+    || (job?.status === "reviewing" && Boolean(job?.errorMessage));
+
   useEffect(() => {
     if (job?.status === "succeeded") {
       queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
@@ -654,7 +658,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       setActiveJobId(null);
       // La comprobación visual es opcional y de solo lectura: no se abre ni se ejecuta automáticamente al terminar una generación.
       toast({ title: "¡Cambios aplicados!", description: "La previsualización se ha recargado automáticamente con la actualización." });
-    } else if (job?.status === "failed") {
+    } else if (job?.status === "failed" || (job?.status === "reviewing" && job?.errorMessage)) {
       queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
       setActiveJobId(null);
       // internalErrorMessage solo viene relleno para la cuenta admin (ver
@@ -776,7 +780,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const gatingQuestions: GatingQuestion[] = isAwaitingTechnicalClarification
     ? (job?.checkpointData?.questions ?? [])
     : [];
-  const isActivelyProcessing = effectiveJobId !== null && !isAwaitingApproval;
+  const isActivelyProcessing = effectiveJobId !== null && !isAwaitingApproval && !isTerminalJob;
   const isWorking = isActivelyProcessing || isAwaitingApproval;
   const handlePasteAttachment = useAttachmentPaste({
     attachments: chatAttachments,
