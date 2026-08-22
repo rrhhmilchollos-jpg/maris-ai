@@ -17,7 +17,8 @@
     "test:testing-agent-safety": "tsx ./src/__tests__/testing-agent-safety.test.ts",
     "test:bundle-integrity": "tsx ./src/__tests__/bundle-integrity.test.ts",
     "test:memory-template-regression": "tsx ./src/__tests__/memory-template-regression.test.ts",
-    "test": "pnpm run test:spanish-intent && pnpm run test:agent-memory && pnpm run test:queue && pnpm run test:evaluator && pnpm run test:critical-fixes && pnpm run test:testing-agent-safety && pnpm run test:bundle-integrity && pnpm run test:memory-template-regression",
+    "test:intent-routing": "tsx ./src/__tests__/intent-routing.test.ts",
+    "test": "pnpm run test:spanish-intent && pnpm run test:intent-routing && pnpm run test:agent-memory && pnpm run test:queue && pnpm run test:evaluator && pnpm run test:critical-fixes && pnpm run test:testing-agent-safety && pnpm run test:bundle-integrity && pnpm run test:memory-template-regression",
     "test:spanish-intent": "tsx ./src/__tests__/spanish-intent-lexicon.test.ts"
   },
   "dependencies": {

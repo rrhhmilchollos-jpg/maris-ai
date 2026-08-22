@@ -232,11 +232,34 @@ function looksLikeResearch(message: string): boolean {
   return RESEARCH_TRIGGERS.some((t) => lower.includes(t));
 }
 
+// Una interrogación no debe convertirse en una mutación solo porque mencione
+// "app", "editar" o "código". Únicamente las peticiones formuladas como una
+// orden o una solicitud de acción inequívoca pueden encolar un trabajo.
+const EXPLICIT_MUTATION_REQUEST_PATTERNS: RegExp[] = [
+  /\b(a[ñn]ade|agrega|crea|construye|genera|implementa|desarrolla|programa|corrige|arregla|repara|cambia|modifica|edita|elimina|borra|quita|publica|despliega|redeploya|actualiza|instala|configura|activa|desactiva)\b/i,
+  /\b(puedes|podr[ií]as|me\s+puedes|quiero\s+que|necesito\s+que|hazme|ponme)\b.*\b(a[ñn]adir|agregar|crear|construir|generar|implementar|desarrollar|corregir|arreglar|reparar|cambiar|modificar|editar|eliminar|borrar|publicar|desplegar|actualizar|instalar|configurar)\b/i,
+];
+
+function hasExplicitMutationRequest(message: string): boolean {
+  return EXPLICIT_MUTATION_REQUEST_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+function looksLikeInformationalQuestion(message: string): boolean {
+  const trimmed = message.trim();
+  const withoutPunctuation = trimmed.replace(/^[¿¡"'\s]+/, "");
+  // No se usa \b aquí: en JavaScript las vocales acentuadas no se consideran
+  // caracteres de palabra y "por qué ..." pierde el límite de palabra.
+  const startsWithInterrogative = /^(por\s+qu[eé]|para\s+qu[eé]|qu[eé]|cu[aá]l(?:es)?|c[oó]mo|d[oó]nde|cu[aá]ndo|qui[eé]n(?:es)?|cu[aá]nto[s]?|puedo\s+(?:ver|saber|usar|hacer)|es\s+posible)(?=\s|$|[,:;.!?¿])/i.test(withoutPunctuation);
+  const hasQuestionMark = /[¿?]/.test(trimmed);
+
+  return (hasQuestionMark || startsWithInterrogative) && !hasExplicitMutationRequest(trimmed);
+}
+
 const SYSTEM_PROMPT = `Eres el enrutador determinista de intención de Maris AI.
 
 Tu trabajo: leer el último mensaje del usuario en el chat de UNA app YA EXISTENTE y decidir qué motor debe ejecutarlo. Devuelves SOLO un JSON:
 
-{"intent":"question"|"research"|"edit"|"execute","reply":"...","reason":"...","isPurelyVisual":true|false}
+{"intent":"question"|"research"|"edit"|"execute"|"ambiguous","reply":"...","reason":"...","isPurelyVisual":true|false}
 
 == MOTORES ==
 
@@ -272,7 +295,7 @@ Ejemplos FALSE: "añade una página de contacto", "haz que el formulario valide 
 2. Si pide cambiar/añadir/arreglar algo en la app o su código → "edit"
 3. Si pide investigar una URL o buscar en internet → "research"
 4. Si solo pregunta sin pedir acción → "question"
-5. En caso de duda entre "edit" y cualquier otro → siempre "edit"
+5. En caso de duda entre "edit" y cualquier otro → "ambiguous". Nunca modifiques una app por una duda.
 
 == CASOS ESPECIALES — SIEMPRE "edit" ==
 - "ponme X", "hazme X", "quiero X en la app" → edit (el usuario quiere un cambio visual/funcional)
@@ -344,7 +367,7 @@ function parseClassifierJson(raw: string): ClassifiedIntent | null {
     return null;
   }
   const intent = parsed?.intent;
-  if (intent !== "question" && intent !== "research" && intent !== "edit" && intent !== "execute") {
+  if (intent !== "question" && intent !== "research" && intent !== "edit" && intent !== "execute" && intent !== "ambiguous") {
     return null;
   }
   const reply = typeof parsed?.reply === "string" ? parsed.reply.trim() : "";
@@ -370,6 +393,22 @@ export async function classifyChatIntent(
   const execution = spanish.isDataOperation || looksLikeExecution(ctx.message);
   const edit = spanish.isDevOperation || looksLikeEdit(ctx.message);
   const research = spanish.isResearch || looksLikeResearch(ctx.message);
+
+  // ── PREGUNTA INFORMATIVA — nunca inicia una mutación ─────────────────────
+  // Debe ejecutarse antes de los detectores de palabras de desarrollo: por
+  // ejemplo, "¿por qué falla el editor?" pregunta por una causa, no ordena
+  // editar. Las solicitudes explícitas ("¿puedes arreglar el editor?") siguen
+  // la ruta de edición por hasExplicitMutationRequest.
+  if (looksLikeInformationalQuestion(ctx.message)) {
+    ctx.log.info({ message: ctx.message.slice(0, 100) }, "Intent classifier → question (informational, no mutation)");
+    return {
+      intent: "question",
+      engine: "ENGINE_INFO",
+      reply: "",
+      reason: "interrogative-without-explicit-mutation",
+      isPurelyVisual: false,
+    };
+  }
 
   // ── AMBIGUO — Segunda verificacion, pedir confirmacion antes de actuar ────
   // Si el mensaje es demasiado vago para saber si pide un cambio o hace una pregunta,
@@ -440,14 +479,14 @@ export async function classifyChatIntent(
       .trim();
     const parsed = parseClassifierJson(text);
     if (!parsed) {
-      ctx.log.warn({ rawSnippet: text.slice(0, 200), heuristicResearch: research }, "Intent classifier returned unparseable JSON — defaulting to edit");
-      return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: "fallback-unparseable", isPurelyVisual: false };
+      ctx.log.warn({ rawSnippet: text.slice(0, 200), heuristicResearch: research }, "Intent classifier returned unparseable JSON — asking for clarification");
+      return { intent: "ambiguous", engine: "ENGINE_CLARIFY", reply: "", reason: "fallback-unparseable", isPurelyVisual: false };
     }
     ctx.log.info({ intent: parsed.intent, engine: parsed.engine, replyLen: parsed.reply.length, reason: parsed.reason }, "Intent classifier decision");
     return parsed;
   } catch (err) {
-    ctx.log.warn({ err, heuristicResearch: research }, "Intent classifier failed — defaulting to edit");
-    return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: "fallback-error", isPurelyVisual: false };
+    ctx.log.warn({ err, heuristicResearch: research }, "Intent classifier failed — asking for clarification");
+    return { intent: "ambiguous", engine: "ENGINE_CLARIFY", reply: "", reason: "fallback-error", isPurelyVisual: false };
   } finally {
     clearTimeout(timeoutHandle);
   }
