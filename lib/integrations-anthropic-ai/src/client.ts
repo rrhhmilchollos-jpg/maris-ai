@@ -28,6 +28,7 @@ type LocalMessageResponse = {
 
 type LlmConfig = { baseUrl: string; apiKey: string; mode: "maris" | "legacy" };
 const LOCAL_REQUEST_TIMEOUT_MS = Number(process.env.MARIS_LLM_REQUEST_TIMEOUT_MS || 70_000);
+const LOCAL_MAX_COMPLETION_TOKENS = Number(process.env.MARIS_LLM_MAX_COMPLETION_TOKENS || 512);
 
 const MARIS_MODELS = {
   fast: process.env.MARIS_LLM_MODEL_FAST || process.env.MARIS_LLM_MODEL || "qwen2.5-coder:1.5b",
@@ -103,6 +104,11 @@ function normalizeMarisMessages(params: LocalMessageParams) {
   return messages;
 }
 
+function boundedLocalMaxTokens(requested?: number): number {
+  const intended = Number.isFinite(requested) && Number(requested) > 0 ? Number(requested) : LOCAL_MAX_COMPLETION_TOKENS;
+  return Math.max(128, Math.min(intended, LOCAL_MAX_COMPLETION_TOKENS));
+}
+
 async function requestLocalModel(params: LocalMessageParams, signal?: AbortSignal): Promise<LocalMessageResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LOCAL_REQUEST_TIMEOUT_MS);
@@ -121,7 +127,7 @@ async function requestLocalModel(params: LocalMessageParams, signal?: AbortSigna
         body: JSON.stringify({
           model: resolveClaudeModel(params.model),
           messages: normalizeMarisMessages(params),
-          max_tokens: params.max_tokens || 4096,
+          max_tokens: boundedLocalMaxTokens(params.max_tokens),
           temperature: params.temperature ?? 0.2,
           stream: false,
         }),
