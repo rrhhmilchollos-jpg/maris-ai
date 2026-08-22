@@ -14,7 +14,8 @@ import { logger } from "./logger";
  * mismo idioma de categorías.
  */
 const BUSINESS_VERTICAL_KEYWORDS: Record<string, string[]> = {
-  restaurante: ["restaurante", "menú", "carta", "reserva de mesa", "comensales", "hostelería", "hamburguesería", "cocina", "delivery", "pedidos a domicilio"],
+  delivery: ["delivery", "reparto", "repartidor", "rider", "comida a domicilio", "pedido a domicilio", "pedidos a domicilio", "supermercado a domicilio", "farmacia a domicilio", "flores a domicilio"],
+  restaurante: ["restaurante", "menú", "carta", "reserva de mesa", "comensales", "hostelería", "hamburguesería", "cocina"],
   clinica: ["clínica", "consulta", "paciente", "cita médica", "dental", "fisioterapia", "salud", "tratamiento", "bono de sesiones"],
   inmobiliaria: ["inmobiliaria", "propiedad", "piso", "alquiler", "vivienda", "apartamento turístico", "alquiler vacacional", "m²"],
   gimnasio: ["gimnasio", "fitness", "membresía", "socio", "clases dirigidas", "entrenamiento", "spinning", "crossfit"],
@@ -49,6 +50,10 @@ function normalize(text: string): string {
   return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+function requestsDeliveryVertical(normalizedPrompt: string): boolean {
+  return /\b(?:delivery|reparto|repartidor(?:es)?|rider(?:s)?|comida a domicilio|pedido(?:s)? a domicilio|a domicilio)\b/.test(normalizedPrompt);
+}
+
 // El aprendizaje global solo puede contener patrones de producto, no material
 // de cliente. Antes de pedir el resumen se eliminan identificadores comunes,
 // secretos y bloques de instrucciones potencialmente maliciosos.
@@ -73,6 +78,9 @@ function sanitizePlaybookSummary(value: string): string {
 
 export function detectBusinessVertical(prompt: string): string | null {
   const normalized = normalize(prompt);
+  // Los playbooks aprendidos de reservas de restaurante no son válidos para
+  // delivery: se prioriza una vertical aislada antes de puntuar coincidencias.
+  if (requestsDeliveryVertical(normalized)) return "delivery";
   let best: { vertical: string; score: number } | null = null;
   for (const [vertical, keywords] of Object.entries(BUSINESS_VERTICAL_KEYWORDS)) {
     const score = keywords.reduce((s, kw) => s + (normalized.includes(normalize(kw)) ? 1 : 0), 0);

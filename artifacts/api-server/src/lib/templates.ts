@@ -611,23 +611,35 @@ function normalizeForTemplateSearch(value: string): string {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function requestsLocalDelivery(normalizedPrompt: string): boolean {
+  return /\b(?:delivery|reparto|repartidor(?:es)?|rider(?:s)?|comida a domicilio|pedido(?:s)? a domicilio|a domicilio)\b/.test(normalizedPrompt);
+}
+
+function explicitlyExcludesAccommodation(normalizedPrompt: string): boolean {
+  return /\b(?:no|sin|nunca|evita|excluye|prohibe|prohibido)\b[\s\S]{0,100}\b(?:turismo|reserva(?:s)?|alojamiento(?:s)?|hotel(?:es)?|hostal(?:es)?|vuelo(?:s)?|alquiler(?:es)?)\b/.test(normalizedPrompt);
+}
+
 export function selectAgentGenerationBlueprint(prompt: string, kind?: string): AgentGenerationBlueprint {
   const normalizedPrompt = normalizeForTemplateSearch(prompt);
   const normalizedKind = (kind || "fullstack") as TemplateKind;
-  // Las palabras Booking/reserva de hotel son señales de dominio muy
-  // específicas. Sin esta prioridad, el término genérico "marketplace" podía
-  // empatar con una plantilla de comercio y ocultar la ruta de alojamientos.
+  const deliveryRequested = requestsLocalDelivery(normalizedPrompt);
+  const accommodationExplicitlyExcluded = explicitlyExcludesAccommodation(normalizedPrompt);
+
   if (/protectora|refugio de animales|refugio municipal|adopcion de perros|acogida animal|voluntariado animal|perrera|rescate animal/.test(normalizedPrompt)) {
     const shelter = AGENT_GENERATION_BLUEPRINTS.find((blueprint) => blueprint.id === "animal-shelter-operations");
     if (shelter && shelter.appliesToKinds.includes(normalizedKind)) return shelter;
   }
-  if (/booking|reserva de hotel|alojamiento|apartamento turistico|hostal/.test(normalizedPrompt)) {
-    const accommodation = AGENT_GENERATION_BLUEPRINTS.find((blueprint) => blueprint.id === "accommodation-marketplace");
-    if (accommodation && accommodation.appliesToKinds.includes(normalizedKind)) return accommodation;
-  }
-  if (/delivery|reparto|comida a domicilio|uber eats|ubereats|glovo|pedido de comida|rider/.test(normalizedPrompt)) {
+  // Delivery es una intención operativa distinta de reservas. Debe ganar
+  // incluso si el cliente menciona alojamiento o reservas para excluirlos.
+  if (deliveryRequested) {
     const delivery = AGENT_GENERATION_BLUEPRINTS.find((blueprint) => blueprint.id === "local-delivery");
     if (delivery && delivery.appliesToKinds.includes(normalizedKind)) return delivery;
+  }
+  // Booking/reserva de hotel solo se trata como alojamiento cuando se solicita
+  // afirmativamente; nunca por una lista de exclusiones del cliente.
+  if (!accommodationExplicitlyExcluded && /booking|reserva de hotel|alojamiento|apartamento turistico|hostal/.test(normalizedPrompt)) {
+    const accommodation = AGENT_GENERATION_BLUEPRINTS.find((blueprint) => blueprint.id === "accommodation-marketplace");
+    if (accommodation && accommodation.appliesToKinds.includes(normalizedKind)) return accommodation;
   }
   const scored = AGENT_GENERATION_BLUEPRINTS.map((blueprint) => {
     const keywordScore = blueprint.detectionKeywords.reduce((score, keyword) => {
@@ -647,13 +659,23 @@ export interface TemplateContextOptions {
   uiLanguage?: string;
 }
 
+function getRelatedPublicTemplateIds(blueprint: AgentGenerationBlueprint, kind?: string): string {
+  const selectedKind = kind as TemplateKind;
+  const relatedTemplateIds: Record<string, string[]> = {
+    "local-delivery": ["delivery-local", "restaurante-delivery"],
+    "accommodation-marketplace": ["marketplace-alojamientos"],
+  };
+  const preferredIds = relatedTemplateIds[blueprint.id];
+  const candidates = preferredIds
+    ? TEMPLATES.filter((template) => preferredIds.includes(template.id) && template.kind === selectedKind)
+    : TEMPLATES.filter((template) => template.kind === selectedKind).slice(0, 4);
+
+  return candidates.map((template) => template.id).join(", ") || "usar la plantilla pública más cercana del catálogo";
+}
+
 export function buildAgentTemplateContextBlock(options: TemplateContextOptions): string {
   const blueprint = selectAgentGenerationBlueprint(options.prompt, options.kind);
-  const publicTemplateIds = TEMPLATES
-    .filter((template) => template.kind === (options.kind as TemplateKind))
-    .slice(0, 4)
-    .map((template) => template.id)
-    .join(", ") || "usar la plantilla pública más cercana del catálogo";
+  const publicTemplateIds = getRelatedPublicTemplateIds(blueprint, options.kind);
 
   const base = `[MARIS AI TEMPLATE BASE — OBLIGATORIO]
 Archivo oficial de plantillas para los agentes: artifacts/api-server/src/lib/templates.ts
@@ -680,4 +702,3 @@ Regla de calidad Maris AI: entregar una base lista para que el cliente empiece a
   const playbooks = buildPlaybooksContextBlock(options.prompt);
   return playbooks ? `${base}\n\n${playbooks}` : base;
 }
-

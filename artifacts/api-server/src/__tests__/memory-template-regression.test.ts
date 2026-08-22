@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { buildDeterministicMemory } from "../lib/agentMemoryExtractor";
-import { TEMPLATES, selectAgentGenerationBlueprint } from "../lib/templates";
+import { TEMPLATES, buildAgentTemplateContextBlock, selectAgentGenerationBlueprint } from "../lib/templates";
+import { detectBusinessVertical } from "../lib/projectPlaybooks";
 
 let failures = 0;
 function expect(label: string, condition: boolean): void {
@@ -28,7 +29,21 @@ expect("selecciona el blueprint de alojamientos", blueprint.id === "accommodatio
 expect("el catálogo público ofrece la plantilla de alojamientos", TEMPLATES.some((template) => template.id === "marketplace-alojamientos"));
 expect("la plantilla prohíbe copiar marcas o activos ajenos", blueprint.qualityChecklist.some((rule) => /no usar marca/i.test(rule)));
 
-console.log("\n[3] Progreso verificable sin spam");
+console.log("\n[3] Clasificación de delivery sin contaminación de reservas");
+const velozYaPrompts = [
+  "Crea VELOZYA, una app de reparto a domicilio de comida y productos. No es turismo, reservas, alojamiento, hotel, vuelos ni alquiler. Incluye restaurantes, supermercado, farmacia, carrito, pedidos y repartidores.",
+  "Construye VelozYa como delivery urbano con comercios, productos, selección de dirección, carrito, checkout demo, seguimiento del repartidor, panel de comercio y panel de reparto. Excluye hoteles, anfitriones, alojamiento y flujos de reserva.",
+];
+for (const [index, deliveryPrompt] of velozYaPrompts.entries()) {
+  const deliveryBlueprint = selectAgentGenerationBlueprint(deliveryPrompt, "fullstack");
+  const context = buildAgentTemplateContextBlock({ prompt: deliveryPrompt, kind: "fullstack" }).toLowerCase();
+  expect(`VelozYa ${index + 1} selecciona delivery`, deliveryBlueprint.id === "local-delivery");
+  expect(`VelozYa ${index + 1} conserva comercios, pedidos y reparto`, /restaurantes|comida/.test(context) && /pedido/.test(context) && /reparto/.test(context));
+  expect(`VelozYa ${index + 1} excluye alojamiento y reserva`, !/alojamiento|hotel|reserva|anfitrion|vuelo/.test(context));
+  expect(`VelozYa ${index + 1} usa memoria aislada de delivery`, detectBusinessVertical(deliveryPrompt) === "delivery");
+}
+
+console.log("\n[4] Progreso verificable sin spam");
 const corePath = path.resolve(process.cwd(), "../../lib/services/src/CoreOrchestrator.ts");
 const core = fs.readFileSync(corePath, "utf8");
 expect("no reemite el mismo heartbeat visible cada 15 segundos", !core.includes("setInterval(emitHeartbeat"));
