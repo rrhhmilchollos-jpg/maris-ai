@@ -712,9 +712,9 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
   const currentAgentConfig = AGENT_CONFIG[currentAgentKey];
 
   return (
-    <div className="flex flex-col h-screen bg-[#0d0d12] overflow-hidden">
+    <div className="flex flex-col h-screen bg-[#111111] overflow-hidden">
       {/* ─── Top Bar ─── */}
-      <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/[0.06] bg-[#0d0d12] shrink-0 z-50">
+      <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/[0.07] bg-[#151515] shrink-0 z-50">
         <div className="flex items-center gap-3">
           {/* Logo */}
           <div className="flex items-center gap-2.5">
@@ -799,9 +799,9 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
       {/* ─── Main Layout ─── */}
       <div className="flex-1 flex min-h-0">
         {/* Left Panel: Chat */}
-        <div className={`${previewExpanded ? "w-0 overflow-hidden" : "w-[460px] min-w-[460px]"} border-r border-white/[0.06] flex flex-col bg-[#0d0d12] transition-all duration-300`}>
+        <div className={`${previewExpanded ? "w-0 overflow-hidden" : "w-[min(58vw,780px)] min-w-[560px]"} border-r border-white/[0.07] flex flex-col bg-[#111111] transition-all duration-300`}>
           {/* Chat header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-[#0a0a10] shrink-0">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.06] bg-[#151515] shrink-0">
             <div className="flex items-center gap-3">
               {isActive ? (
                 <>
@@ -889,7 +889,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
           </div>
 
           {/* IDs del proyecto — siempre visibles para soporte */}
-          <div className="px-3 py-1.5 border-t border-white/[0.04] bg-[#0a0a10]/50 flex items-center gap-3 flex-wrap">
+          <div className="px-5 py-2 border-t border-white/[0.05] bg-[#151515] flex items-center gap-3 flex-wrap">
             {jobId && (
               <span
                 className="text-[9px] font-mono text-white/20 hover:text-white/40 cursor-pointer transition-colors"
@@ -916,28 +916,28 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
           </div>
 
           {/* Message input */}
-          <div className="p-3 border-t border-white/[0.06] bg-[#0a0a10] shrink-0">
+          <div className="border-t border-white/[0.06] bg-[#151515] px-5 pb-5 pt-3 shrink-0">
             {isDone && (
               <p className="text-[10px] text-white/30 text-center mb-2">
                 Puedes pedir cambios o mejoras a tu app
               </p>
             )}
-            <div className="relative flex flex-col bg-[#16161e] border border-white/[0.08] rounded-xl focus-within:border-violet-500/40 transition-all">
+            <div className="relative flex flex-col rounded-2xl border border-emerald-300/25 bg-[#0b0b0b] shadow-[0_0_0_1px_rgba(52,211,153,0.06),0_16px_45px_rgba(0,0,0,0.35)] focus-within:border-emerald-300/50 transition-all">
               <textarea
                 ref={textareaRef}
                 value={message}
                 onChange={handleTextareaChange}
                 onKeyDown={handleKeyDown}
                 placeholder={isDone ? "Pide cambios a tu app... (Enter para enviar)" : "Mensaje a los agentes..."}
-                className="w-full bg-transparent px-4 pt-3 pb-2 text-sm text-white placeholder:text-white/20 outline-none resize-none min-h-[60px] max-h-[120px] custom-scrollbar"
+                className="w-full min-h-[72px] max-h-[120px] resize-none bg-transparent px-4 pt-4 pb-2 text-sm text-white placeholder:text-white/25 outline-none custom-scrollbar"
                 disabled={generateAppMutation.isPending || (isActive && !isDone)}
                 rows={2}
               />
-              <div className="flex items-center justify-between px-3 py-2 border-t border-white/[0.05]">
+              <div className="flex items-center justify-between border-t border-white/[0.06] px-3 py-2.5">
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-1.5 text-white/30 hover:text-white/60 hover:bg-white/5 rounded-lg transition-all"
+                    className="rounded-lg p-1.5 text-white/35 transition-all hover:bg-white/5 hover:text-white/75"
                     title="Adjuntar archivo"
                   >
                     <Paperclip className="h-3.5 w-3.5" />
@@ -946,7 +946,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
                     <button
                       onClick={handlePushToGitHub}
                       disabled={pushToGitHubMutation.isPending}
-                      className="p-1.5 text-white/30 hover:text-white/60 hover:bg-white/5 rounded-lg transition-all disabled:opacity-40"
+                      className="rounded-lg p-1.5 text-white/35 transition-all hover:bg-white/5 hover:text-white/75 disabled:opacity-40"
                       title="Subir a GitHub"
                     >
                       {pushToGitHubMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Github className="h-3.5 w-3.5" />}
@@ -961,7 +961,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
                   disabled={!message.trim() || generateAppMutation.isPending || (isActive && !isDone)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                     message.trim() && !isActive
-                      ? "bg-violet-600 text-white hover:bg-violet-500 shadow-lg shadow-violet-500/20"
+                      ? "bg-emerald-300 text-[#062a23] hover:bg-emerald-200 shadow-lg shadow-emerald-300/10"
                       : "bg-white/5 text-white/20 cursor-not-allowed"
                   }`}
                 >
@@ -979,7 +979,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
         </div>
 
         {/* Right Panel: Preview */}
-        <div className="flex-1 flex flex-col min-w-0 bg-[#080810]">
+          <div className="flex-1 flex flex-col min-w-0 bg-[#0b0b0b]">
           <LivePreview
             appId={appId || ""}
             appName={job?.title || "App Preview"}

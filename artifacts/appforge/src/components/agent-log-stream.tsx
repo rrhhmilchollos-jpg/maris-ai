@@ -114,6 +114,15 @@ function LogEntry({ line, isLatest }: LogEntryProps) {
   const isExpandable = isCodeBlock || filePath !== null;
   const isError = line.level === "error";
   const isWarn = line.level === "warn";
+  const actionLabel = /view|viendo|leyendo/i.test(line.message)
+    ? "Consultado"
+    : /edit|editando|actualizando|escribiendo/i.test(line.message)
+    ? "Editado"
+    : /creando|created/i.test(line.message)
+    ? "Creado"
+    : /test|valid/i.test(line.message)
+    ? "Validado"
+    : "Actividad";
 
   const summaryText = filePath
     ? line.message.replace(/FILE:\s*\S+/, "").trim() || filePath
@@ -122,77 +131,37 @@ function LogEntry({ line, isLatest }: LogEntryProps) {
     : line.message;
 
   return (
-    <div
-      className={`group rounded-lg border transition-all duration-200 animate-in fade-in slide-in-from-left-1 ${
-        isError
-          ? "border-red-500/20 bg-red-500/5"
-          : isWarn
-          ? "border-amber-500/20 bg-amber-500/5"
-          : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.035]"
-      } ${isLatest ? "ring-1 ring-[#7c3aed]/25" : ""}`}
-    >
-      {/* Cabecera del bloque */}
-      <div
-        className={`flex items-center gap-2 px-3 py-2 ${isExpandable ? "cursor-pointer select-none" : ""}`}
-        onClick={isExpandable ? () => setExpanded((v) => !v) : undefined}
-      >
-        {/* Icono del agente */}
-        <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${config.bgColor}`}>
-          <Icon className={`h-3 w-3 ${config.color}`} />
-        </div>
-
-        {/* Nombre del agente */}
-        <span className={`text-[10px] font-black uppercase tracking-widest ${config.color} shrink-0`}>
-          {config.label}
-        </span>
-
-        {/* Icono de acción si hay ruta de archivo */}
-        {filePath && (
-          <ActionIcon className="h-3 w-3 text-white/25 shrink-0" />
-        )}
-
-        {/* Texto del mensaje */}
-        <span
-          className={`flex-1 truncate font-mono text-[10.5px] ${
-            isError ? "text-red-400" : isWarn ? "text-amber-400" : "text-white/50"
-          }`}
-        >
-          {filePath ? (
-            <span className="text-white/65">{filePath}</span>
-          ) : (
-            summaryText
-          )}
-        </span>
-
-        {/* Hora */}
-        <span className="shrink-0 font-mono text-[9px] text-white/20">{timeOf(line.createdAt)}</span>
-
-        {/* Indicador de activo */}
-        {isLatest && (
-          <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 animate-ping" />
-        )}
-
-        {/* Flecha expandir */}
-        {isExpandable && (
-          <div className="shrink-0 text-white/25 transition-transform duration-200">
-            {expanded ? (
-              <ChevronDown className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5" />
-            )}
-          </div>
-        )}
+    <article className={`flex gap-3 py-3 ${isError ? "rounded-xl border border-red-400/25 bg-red-500/[0.07] px-3" : isWarn ? "rounded-xl border border-amber-300/20 bg-amber-400/[0.06] px-3" : ""}`}>
+      <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 ${config.bgColor}`}>
+        <Icon className={`h-3.5 w-3.5 ${config.color}`} />
       </div>
-
-      {/* Contenido expandido */}
-      {isExpandable && expanded && (
-        <div className="border-t border-white/[0.05] bg-[#060810] px-4 py-3">
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-relaxed text-white/65">
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-center gap-2">
+          <span className={`text-[10px] font-bold tracking-wide ${config.color}`}>{config.label}</span>
+          <span className="text-[10px] text-white/25">{timeOf(line.createdAt)}</span>
+          {isLatest && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-label="evento actual" />}
+        </div>
+        {filePath ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="flex w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.035] px-3 py-2 text-left transition-colors hover:bg-white/[0.07]"
+          >
+            <ActionIcon className="h-3.5 w-3.5 shrink-0 text-white/45" />
+            <span className="shrink-0 text-[10px] text-white/45">{actionLabel}</span>
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-fuchsia-300">{filePath}</span>
+            {expanded ? <ChevronDown className="h-3.5 w-3.5 text-white/30" /> : <ChevronRight className="h-3.5 w-3.5 text-white/30" />}
+          </button>
+        ) : (
+          <p className={`whitespace-pre-wrap break-words text-[12px] leading-5 ${isError ? "text-red-200" : isWarn ? "text-amber-100" : "text-white/75"}`}>{summaryText}</p>
+        )}
+        {isExpandable && expanded && (
+          <pre className="mt-2 overflow-x-auto rounded-lg border border-white/[0.06] bg-black/30 p-3 whitespace-pre-wrap break-words font-mono text-[10px] leading-relaxed text-white/65">
             {extractCode(line.message)}
           </pre>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -271,7 +240,8 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   if (jobId === null) return null;
 
   return (
-    <div className="flex flex-col h-full overflow-auto custom-scrollbar bg-[#080a12] p-3 gap-1">
+    <div className="flex h-full flex-col overflow-auto bg-[#111111] px-5 py-6 custom-scrollbar">
+      <div className="mx-auto flex w-full max-w-[650px] flex-col pb-44">
       {lines.length === 0 && isActive && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="relative mb-4">
@@ -294,7 +264,8 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
         />
       ))}
 
-      <div ref={bottomRef} />
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }
