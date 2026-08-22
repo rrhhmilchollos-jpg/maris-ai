@@ -8036,7 +8036,7 @@ export async function runJobById(
         await AppMessage.create({
           appId: job.editAppId,
           role: "assistant",
-          content: `⚠️ No pude completar este cambio correctamente${finalResult.error ? ` (${String(finalResult.error).slice(0, 200)})` : validationSummary ? ` (${validationSummary.slice(0, 200)})` : " (la respuesta del modelo no tenía el formato esperado)"}. Para proteger tu trabajo, NO he sobrescrito tu app — sigue funcionando con la versión anterior, sin cambios perdidos ni créditos descontados de más. Intenta de nuevo, quizá reformulando la petición o dividiéndola en pasos más pequeños.`,
+          content: "⚠️ No pude completar este cambio correctamente porque el código propuesto no superó la validación necesaria para proteger tu app. NO he sobrescrito tu versión actual, por lo que no se han perdido cambios ni se han aplicado modificaciones incompletas. Puedes reformular la petición o dividirla en pasos más pequeños.",
         });
         editResultInvalid = true;
       } else {
