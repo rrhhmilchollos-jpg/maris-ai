@@ -222,6 +222,9 @@ export interface IGeneratedApp {
   vercelDeployUrl?: string;
   vercelProjectId?: string;
   vercelCustomDomain?: string;
+  // Enlace estable de publicación gestionada por Maris AI. Permite publicar
+  // una app estática sin depender de un token externo de Vercel.
+  marisaiPublishUrl?: string;
   // A petición explícita del usuario: ventana de gracia de re-deploy
   // gratuito. Se registra el momento del último deploy COBRADO (no de
   // cualquier deploy) — si el cliente vuelve a pulsar "Deploy" dentro de
@@ -384,6 +387,7 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     vercelDeployUrl: { type: String },
     vercelProjectId: { type: String },
     vercelCustomDomain: { type: String },
+    marisaiPublishUrl: { type: String },
     lastPaidDeployAt: { type: Date },
     deployPhase: { type: String, default: null },
     deployStartedAt: { type: Date },

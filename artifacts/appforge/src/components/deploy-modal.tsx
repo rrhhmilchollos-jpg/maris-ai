@@ -434,7 +434,7 @@ export function DeployModal({
     try {
       const data = await apiFetch<{ status?: string; error?: string; hint?: string; creditsCharged?: number; freeRedeploy?: boolean }>(
         `/api/apps/${appId}/deploy`,
-        { method: "POST" },
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: "maris" }) },
       );
       if (data.error) throw new Error(data.hint || data.error);
       if (data.freeRedeploy) {
@@ -457,7 +457,7 @@ export function DeployModal({
     try {
       const data = await apiFetch<{ status?: string; error?: string; hint?: string; creditsCharged?: number; freeRedeploy?: boolean }>(
         `/api/apps/${appId}/deploy`,
-        { method: "POST" },
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: "maris" }) },
       );
       if (data.error) throw new Error(data.hint || data.error);
       if (data.freeRedeploy) {
@@ -787,12 +787,19 @@ export function DeployModal({
 
             {/* Deploy button */}
             <div className="px-5 pb-4">
+              <div className="mb-3 flex items-start gap-3 rounded-xl border border-[#7c3aed]/25 bg-[#7c3aed]/10 px-3.5 py-3">
+                <Globe className="mt-0.5 h-4 w-4 shrink-0 text-[#c084fc]" />
+                <div>
+                  <p className="text-xs font-bold text-white">Publicación gestionada por Maris AI</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-white/55">Tu app se publica aquí mismo con un enlace estable. No necesitas configurar Vercel ni salir de la plataforma.</p>
+                </div>
+              </div>
               <button
                 onClick={handleInitialDeploy}
                 disabled={isDeploying}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#7c3aed] to-[#9333ea] py-3.5 text-sm font-bold text-white shadow-lg shadow-[#7c3aed]/30 hover:from-[#8b5cf6] hover:to-[#a855f7] transition disabled:opacity-60"
               >
-                {isDeploying ? <><Loader2 className="h-4 w-4 animate-spin" /> Desplegando...</> : <><Rocket className="h-4 w-4" /> Iniciar despliegue</>}
+                {isDeploying ? <><Loader2 className="h-4 w-4 animate-spin" /> Publicando...</> : <><Rocket className="h-4 w-4" /> Publicar en Maris AI</>}
               </button>
             </div>
 

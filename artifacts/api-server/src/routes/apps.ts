@@ -8821,6 +8821,38 @@ router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
       return res.status(400).json({ error: "Esta app todavía no tiene código generado — no hay nada que desplegar." });
     }
 
+    // Publicación gestionada por Maris AI: es la ruta predeterminada del botón
+    // Deploy. La app se sirve desde la infraestructura ya existente de Maris
+    // AI, con una URL estable, sin redirigir al cliente a Vercel ni requerir un
+    // token externo. Vercel queda reservado para la opción avanzada futura.
+    if ((req.body as any)?.provider === "maris" || !process.env.VERCEL_TOKEN) {
+      const publicBase = (process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es").replace(/\/+$/, "");
+      const publishUrl = `${publicBase}/api/apps/${req.params.id}/preview`;
+      const now = new Date();
+      await GeneratedApp.updateOne(
+        { _id: req.params.id, userId },
+        {
+          $set: {
+            marisaiPublishUrl: publishUrl,
+            deploymentStatus: "deployed",
+            deployPhase: "done",
+            deployStartedAt: now,
+            deployError: null,
+            deploymentError: null,
+            deploymentLogs: "Publicada mediante Maris Hosting",
+            lastDeployedAt: now,
+          },
+        },
+      );
+      return res.status(202).json({
+        status: "started",
+        provider: "maris_hosting",
+        deploymentUrl: publishUrl,
+        creditsCharged: 0,
+        freeRedeploy: true,
+      });
+    }
+
     const lastPaidDeployAt: Date | undefined = (app as any).lastPaidDeployAt;
     const withinGraceWindow = !!lastPaidDeployAt && (Date.now() - new Date(lastPaidDeployAt).getTime()) < DEPLOY_GRACE_WINDOW_MS;
     // A petición explícita del usuario: el PRIMER deploy cobrado de cada
@@ -8906,14 +8938,14 @@ router.get("/apps/:id/deploy-status", requireAuth, async (req: any, res: any) =>
   try {
     const userId = req.userId as string;
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId })
-      .select("deployPhase deployStartedAt deployError vercelDeployUrl")
+      .select("deployPhase deployStartedAt deployError vercelDeployUrl marisaiPublishUrl")
       .lean();
     if (!app) return res.status(404).json({ error: "App no encontrada" });
     res.json({
       phase: (app as any).deployPhase ?? null,
       startedAt: (app as any).deployStartedAt ?? null,
       error: (app as any).deployError ?? null,
-      deploymentUrl: (app as any).vercelDeployUrl ?? null,
+      deploymentUrl: (app as any).marisaiPublishUrl ?? (app as any).vercelDeployUrl ?? null,
     });
   } catch (err: any) {
     logger.error({ err }, "GET /api/apps/:id/deploy-status error");
