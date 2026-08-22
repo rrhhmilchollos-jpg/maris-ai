@@ -6,7 +6,6 @@ import { logger } from "./lib/logger";
 import { reclaimOrphanedJobs, runJobById } from "./routes/apps";
 import { startQueue, registerGenerateWorker, stopQueue } from "./lib/jobQueue";
 import { startSelfMonitor } from "./lib/selfMonitor";
-import { runFreeCreditsRenewalTick } from "./lib/freeCreditsRenewal";
 import { submitIndexNow } from "./lib/indexNow";
 import { pingRedis, isRedisConfigured } from "./lib/redisHealth";
 import { connectDB } from "./lib/db";
@@ -177,21 +176,10 @@ httpServer.listen(finalPort, async (err?: Error) => {
   // desde el servidor ni se inicia la integración heredada de Viva.com.
   logger.info("Recurring Billing heredado desactivado — los créditos solo se acreditan por webhook Stripe verificado");
 
-  // 6b-2) Caducidad mensual de créditos del plan GRATIS — mismo ciclo que
-  // el plan de pago (ver lib/freeCreditsRenewal.ts), a petición explícita:
-  // los créditos no deben acumularse indefinidamente en ningún plan, ni
-  // siquiera el gratuito, igual que en emergent.sh.
-  try {
-    runFreeCreditsRenewalTick().catch((err) => logger.error({ err }, "Free credits renewal initial tick failed"));
-    const freeCreditsInterval = setInterval(
-      () => runFreeCreditsRenewalTick().catch((err) => logger.error({ err }, "Free credits renewal tick failed")),
-      60 * 60 * 1000,
-    );
-    freeCreditsInterval.unref();
-    logger.info("Free Credits Renewal started — hourly tick");
-  } catch (freeCreditsErr) {
-    logger.error({ err: freeCreditsErr }, "Failed to start Free Credits Renewal");
-  }
+  // 6b-2) Política comercial: no se conceden ni renuevan créditos de forma
+  // automática. Cualquier compensación exige un ticket de soporte y una
+  // aprobación humana explícita; no existe un job que pueda saltarse esa puerta.
+  logger.info("Automatic credit grants disabled — manual support approval required");
 
   // 6b-3) Aviso de renovación próxima de plan (48h) — notificación al
   // CLIENTE (campanita/UserNotification), no a los admins. Mismo patrón

@@ -34,7 +34,9 @@ export const KIND_COSTS = {
   "game-3d":    5, // Proyecto muy complejo
 } as const;
 
-export const FREE_PLAN_CREDITS = 65; // mismo valor que credits.ts/auth.ts/clerkWebhook.ts al registrarse
+// No hay créditos de cortesía automáticos: las recargas solo se acreditan por
+// Stripe confirmado o por una compensación aprobada manualmente en soporte.
+export const FREE_PLAN_CREDITS = 0;
 export const MONTHLY_SUBSCRIPTION_CREDITS = 100;
 
 export const SUBSCRIPTION_PLANS = [
@@ -43,7 +45,7 @@ export const SUBSCRIPTION_PLANS = [
     name: "Gratis",
     price: 0,
     creditsPerMonth: FREE_PLAN_CREDITS,
-    features: ["65 créditos iniciales", "Subdominio Maris AI", "Soporte comunitario"],
+    features: ["Sin créditos de cortesía", "Subdominio Maris AI", "Soporte comunitario"],
   },
   {
     id: "pro",

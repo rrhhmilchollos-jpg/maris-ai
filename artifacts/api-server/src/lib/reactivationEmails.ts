@@ -13,7 +13,7 @@
  *   Día 3:  Email 1 — "¿Cómo va tu proyecto?" (suave, curiosidad)
  *   Día 7:  Email 2 — "Tu app te está esperando" (urgencia suave + valor)
  *   Día 14: Email 3 — "Últimos créditos antes de que caduquen" (FOMO)
- *   Día 30: Email 4 — Oferta especial de reactivación (descuento o créditos)
+ *   Día 30: Email 4 — Recordatorio de novedades y soporte humano
  *
  * Se ejecuta una vez al día desde index.ts.
  * Guarda en BD qué emails ya se enviaron para no duplicar.
@@ -192,7 +192,7 @@ function emailDay14(ctx: ReactivationContext): { subject: string; html: string; 
 }
 
 function emailDay30(ctx: ReactivationContext): { subject: string; html: string; text: string } {
-  const subject = `Un mes después... 🎁 Tenemos algo para ti, ${ctx.userName.split(" ")[0]}`;
+  const subject = `Un mes después: novedades para tu proyecto, ${ctx.userName.split(" ")[0]}`;
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -200,16 +200,16 @@ function emailDay30(ctx: ReactivationContext): { subject: string; html: string; 
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 16px">
 <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
   <tr><td style="background:linear-gradient(135deg,#059669,#047857);padding:32px 36px;text-align:center">
-    <div style="font-size:40px;margin-bottom:12px">🎁</div>
+    <div style="font-size:40px;margin-bottom:12px">✨</div>
     <h1 style="color:#ffffff;font-size:22px;margin:0;font-weight:700">Un mes sin vernos</h1>
-    <p style="color:rgba(255,255,255,0.85);font-size:14px;margin:8px 0 0">Y queremos que vuelvas con algo especial</p>
+    <p style="color:rgba(255,255,255,0.85);font-size:14px;margin:8px 0 0">Tu proyecto sigue disponible cuando quieras retomarlo</p>
   </td></tr>
   <tr><td style="padding:36px">
     <p style="color:#374151;font-size:16px;line-height:1.6;margin:0 0 20px">Hola ${ctx.userName.split(" ")[0]}, ha pasado un mes desde tu última visita a Maris AI. Mucho ha mejorado desde entonces.</p>
     <div style="background:#ecfdf5;border-radius:10px;padding:24px;margin:0 0 24px;border:1px solid #a7f3d0;text-align:center">
-      <p style="color:#065f46;font-size:18px;font-weight:700;margin:0 0 8px">🎁 25 créditos gratis</p>
-      <p style="color:#047857;font-size:14px;margin:0 0 16px">Te los hemos añadido a tu cuenta como bienvenida de vuelta</p>
-      <p style="color:#6b7280;font-size:13px;margin:0">Úsalos para continuar "${ctx.lastAppTitle}" o empezar algo nuevo</p>
+      <p style="color:#065f46;font-size:18px;font-weight:700;margin:0 0 8px">Tu proyecto permanece guardado</p>
+      <p style="color:#047857;font-size:14px;margin:0 0 16px">Puedes retomar "${ctx.lastAppTitle}" o empezar uno nuevo cuando lo necesites</p>
+      <p style="color:#6b7280;font-size:13px;margin:0">Si necesitas ayuda con créditos o con tu proyecto, soporte revisará tu caso por ticket</p>
     </div>
     <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px"><strong>Novedades desde que te fuiste:</strong></p>
     <ul style="color:#374151;font-size:14px;line-height:2;margin:0 0 24px;padding-left:18px">
@@ -220,7 +220,7 @@ function emailDay30(ctx: ReactivationContext): { subject: string; html: string; 
     </ul>
     <table width="100%"><tr><td align="center">
       <a href="https://www.marisai.es/dashboard" style="display:inline-block;background:linear-gradient(135deg,#059669,#047857);color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 36px;border-radius:8px;box-shadow:0 4px 12px rgba(5,150,105,0.3)">
-        Volver y usar mis 25 créditos →
+        Volver a mi proyecto →
       </a>
     </td></tr></table>
     <p style="color:#9ca3af;font-size:13px;text-align:center;margin:20px 0 0">¿Quieres saber más sobre las novedades? Responde a este email.</p>
@@ -231,7 +231,7 @@ function emailDay30(ctx: ReactivationContext): { subject: string; html: string; 
   </td></tr>
 </table></td></tr></table>
 </body></html>`;
-  const text = `${ctx.userName.split(" ")[0]},\n\nHa pasado un mes. Te hemos añadido 25 créditos gratis como bienvenida de vuelta.\n\nMuchas cosas han mejorado en Maris AI: generación más rápida, orquestador por hitos, dominios personalizados.\n\nVuelve aquí: https://www.marisai.es/dashboard\n\nEl equipo de Maris AI\nsoporte@marisai.es`;
+  const text = `${ctx.userName.split(" ")[0]},\n\nHa pasado un mes. Tu proyecto sigue guardado y puedes retomarlo cuando quieras.\n\nMuchas cosas han mejorado en Maris AI: generación más rápida, orquestador por hitos, dominios personalizados. Si necesitas ayuda con créditos o con tu proyecto, soporte revisará tu caso por ticket.\n\nVuelve aquí: https://www.marisai.es/dashboard\n\nEl equipo de Maris AI\nsoporte@marisai.es`;
   return { subject, html, text };
 }
 
@@ -305,14 +305,11 @@ export async function runReactivationTick(): Promise<void> {
         const ok = await sendReactivationEmail({ to: user.email, ...emailContent });
 
         if (ok) {
-          // Marcar como enviado + añadir 25 créditos en el email del día 30
+          // Marcar como enviado. Esta campaña nunca acredita créditos.
           const updates: any = {
             $addToSet: { reactivationEmailsSent: emailToSend },
             $set: { lastReactivationEmailAt: now },
           };
-          if (emailToSend === "day30") {
-            updates.$inc = { credits: 25 };
-          }
           await User.findByIdAndUpdate(user._id, updates);
           sent[emailToSend]++;
           log.info({ email: user.email, emailToSend, daysSince }, "Email de reactivación enviado");

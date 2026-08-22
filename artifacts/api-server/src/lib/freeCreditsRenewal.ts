@@ -18,14 +18,7 @@
  * caducan), simplemente sin pasar por Viva — no hay cobro que confirmar,
  * el plan gratis se "renueva" solo.
  */
-import { connectDB } from "./db";
-import { User } from "@workspace/db/schema";
-import { grantPlanCredits } from "./credits";
-import { FREE_PLAN_CREDITS } from "./payments";
-import { isAdminEmail } from "./auth";
 import { logger } from "./logger";
-
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Recorre cuentas del plan gratis cuyo ciclo mensual ya venció (o que
@@ -35,39 +28,8 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
  * anterior. Nunca lanza — cada usuario se procesa de forma aislada.
  */
 export async function runFreeCreditsRenewalTick(): Promise<void> {
-  await connectDB();
-
-  const now = new Date();
-
-  // Candidatos: plan gratis, y (a) su ciclo ya venció, o (b) nunca tuvieron
-  // uno asignado (cuentas creadas antes de este cambio). isAdmin queda
-  // fuera de esta consulta porque isAdminEmail ya les da créditos
-  // ilimitados por otra vía — no necesitan pasar por aquí.
-  const candidates = await User.find(
-    {
-      plan: "free",
-      $or: [{ planExpiresAt: { $lte: now } }, { planExpiresAt: { $exists: false } }],
-    },
-    { _id: 1, email: 1 },
-  ).lean();
-
-  const pending = candidates.filter((u) => !isAdminEmail(u.email));
-  if (pending.length === 0) return;
-
-  logger.info({ count: pending.length }, "freeCreditsRenewal: cuentas gratis a renovar este ciclo");
-
-  for (const user of pending) {
-    try {
-      await grantPlanCredits({
-        clerkUserId: user._id,
-        planId: "free",
-        creditsPerMonth: FREE_PLAN_CREDITS,
-        periodEnd: Math.floor((now.getTime() + THIRTY_DAYS_MS) / 1000),
-      });
-    } catch (err) {
-      // Aislado por usuario — igual que recurringBilling.ts, un fallo
-      // puntual no debe bloquear la renovación del resto de cuentas.
-      logger.error({ err, userId: user._id }, "freeCreditsRenewal: fallo al renovar cuenta gratis — continuando con el resto");
-    }
-  }
+  // Defensa en profundidad: incluso si un futuro arranque invocase este
+  // módulo, no puede acreditar saldo. Las compensaciones se conceden solo
+  // desde soporte tras una aprobación humana registrada.
+  logger.info("freeCreditsRenewal: disabled by manual-compensation policy");
 }
