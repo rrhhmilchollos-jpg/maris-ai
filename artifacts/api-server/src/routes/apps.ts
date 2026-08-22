@@ -7993,6 +7993,7 @@ export async function runJobById(
 
     const finalResult = result as any;
     let editResultInvalid = false;
+    let editFailureMessage: string | null = null;
 
     if (job.editAppId) {
       // ── VALIDACIÓN DEL RESULTADO ANTES DE SOBRESCRIBIR ─────────────────────
@@ -8024,6 +8025,9 @@ export async function runJobById(
           : editBundleValidation?.issues?.[0]?.message || null;
 
       if (hasError || !validFrontend || unchangedEdit) {
+        editFailureMessage = finalResult.error
+          ? String(finalResult.error).slice(0, 300)
+          : validationSummary || "La edición no produjo un bundle válido";
         logger.warn(
           { jobId, editAppId: job.editAppId, error: finalResult.error, validationSummary, fcLen: typeof fc === "string" ? fc.length : -1 },
           "Edit job produjo un resultado inválido/incompleto — se preserva la app anterior sin sobrescribir",
@@ -8641,7 +8645,9 @@ export async function runJobById(
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: firstAppGuaranteeEscalated
         ? { status: "reviewing", phase: "reviewing", progress: 100, updatedAt: new Date(), errorMessage: "Tu app está siendo revisada por un especialista — te avisaremos en cuanto esté lista." }
-        : { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
+        : editResultInvalid
+          ? { status: "failed", phase: "failed", progress: 100, updatedAt: new Date(), errorMessage: editFailureMessage || "La edición no produjo cambios válidos; la versión anterior se conserva intacta." }
+          : { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
     });
 
     // EMAIL: notificar al usuario que su primera app está lista
