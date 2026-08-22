@@ -712,6 +712,11 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
         if (data.status === "succeeded" || data.status === "failed") return false;
         return 800;
       },
+      // La consola puede ejecutarse en una pestaña secundaria mientras el
+      // usuario consulta la preview o cambia de panel. Sin este ajuste,
+      // React Query pausa el polling en segundo plano y deja 0 % visible
+      // aunque el worker ya haya avanzado el job en el servidor.
+      refetchIntervalInBackground: true,
     },
   });
 

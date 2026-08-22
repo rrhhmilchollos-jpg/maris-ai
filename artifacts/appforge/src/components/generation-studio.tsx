@@ -307,6 +307,10 @@ function ChatLogStream({ jobId, isActive }: { jobId: string | null; isActive: bo
     },
     enabled,
     refetchInterval: (query) => pollingInterval(query, isActive, JOB_POLLING.logs),
+    // Conserva la cronología de agentes cuando la consola no tiene foco;
+    // los eventos siguen llegando por polling sin depender de una pestaña
+    // activa o de la entrega puntual de WebSocket.
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: false,
     staleTime: 0,
     gcTime: 60_000,
