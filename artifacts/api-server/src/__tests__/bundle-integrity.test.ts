@@ -47,6 +47,14 @@ export default function App() {
 }
 `;
 
+const topLevelHookBundle = `// === FILE: src/App.tsx ===
+import { useState } from "react";
+const [updatedAt, setUpdatedAt] = useState("ahora");
+export default function App() {
+  return <button onClick={() => setUpdatedAt("actualizado")}>{updatedAt}</button>;
+}
+`;
+
 async function expectRejected(name: string, bundle: string, fragment: string) {
   const report = await validateBundle(bundle);
   assert.equal(report.ok, false, `${name}: el bundle debía rechazarse`);
@@ -63,6 +71,7 @@ async function main() {
   await expectRejected("archivo fuente vacío", emptySourceBundle, "Empty source file");
   await expectRejected("raíz React sin interfaz", blankRootBundle, "React root returns no visible interface");
   await expectRejected("error de sintaxis de edición", syntaxErrorBundle, "Expected");
+  await expectRejected("hook React a nivel de módulo", topLevelHookBundle, "called at module scope");
 
   console.log("\nLa puerta de integridad bloquea resultados vacíos, incompletos y no renderizables.");
 }

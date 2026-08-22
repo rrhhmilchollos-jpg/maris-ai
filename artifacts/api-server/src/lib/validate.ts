@@ -229,6 +229,37 @@ function detectMissingReactHookImports(vfs: Record<string, string>): BuildIssue[
   return issues;
 }
 
+/**
+ * React solo permite llamar hooks durante el render de un componente o hook
+ * personalizado. Esbuild acepta `const [x] = useState()` a nivel de módulo,
+ * pero React falla en el navegador con `useState` nulo. Rechazamos ese patrón
+ * antes de reemplazar una versión sana por una vista previa que no puede montar.
+ */
+function detectTopLevelReactHookCalls(vfs: Record<string, string>): BuildIssue[] {
+  const issues: BuildIssue[] = [];
+  const hooks = ["useState", "useEffect", "useMemo", "useCallback", "useRef", "useContext", "useReducer", "useLayoutEffect"];
+
+  for (const [file, contents] of Object.entries(vfs)) {
+    if (!/\.(t|j)sx$/.test(file)) continue;
+
+    const firstComponent = contents.search(/(?:export\s+default\s+)?function\s+[A-Z][\w$]*\s*\(|(?:const|let|var)\s+[A-Z][\w$]*\s*=\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>/);
+    const moduleScopeEnd = firstComponent >= 0 ? firstComponent : contents.length;
+
+    for (const hook of hooks) {
+      const call = new RegExp(`(?<![.$\\w])${hook}\\s*\\(`).exec(contents);
+      if (!call || call.index >= moduleScopeEnd) continue;
+      const line = contents.slice(0, call.index).split("\n").length;
+      issues.push({
+        file,
+        line,
+        message: `${hook} is called at module scope. Move the hook inside a React component or a custom hook before delivering this preview.`,
+      });
+    }
+  }
+
+  return issues;
+}
+
 function detectKnownBadPackageImports(
   vfs: Record<string, string>,
 ): BuildIssue[] {
@@ -723,6 +754,7 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
     // surfaces as a runtime crash in the real browser.
     issues.push(...detectKnownBadPackageImports(vfs));
     issues.push(...detectMissingReactHookImports(vfs));
+    issues.push(...detectTopLevelReactHookCalls(vfs));
     // Validaciones estructurales de router — detectan 404/blank page ANTES
     // de que el evaluador visual tenga que hacerlo (ahorra un ciclo completo
     // de evaluación + auto-fix que antes era necesario para cada app con

@@ -102,7 +102,7 @@ export async function buildDeployHtml(opts: {
   if (!entry) {
     throw new Error("El bundle no contiene una entrada React ni un componente raíz recuperable.");
   }
-  if (entrypoint.recovered) {
+  if (entrypoint?.recovered) {
     logger.info({ entry, source: entrypoint.source }, "buildDeployHtml: entrada React recuperada en memoria");
   }
 
@@ -294,12 +294,8 @@ export async function buildDeployHtml(opts: {
       var msg = document.createElement("div");
       msg.textContent = "Hubo un error al ejecutarse en tu navegador. El propietario ya recibió el aviso y puede regenerarla desde su panel.";
       msg.style.cssText = "font-size:14px;line-height:1.5;color:#a4abbb;margin-bottom:18px;";
-      var detailEl = document.createElement("div");
-      detailEl.textContent = detail || "";
-      detailEl.style.cssText = "font-size:11px;color:#6b7185;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word;background:#0b0d12;border:1px solid #1f2430;border-radius:8px;padding:10px;text-align:left;max-height:160px;overflow:auto;display:" + (detail ? "block" : "none") + ";";
       card.appendChild(title);
       card.appendChild(msg);
-      if (detail) card.appendChild(detailEl);
       box.appendChild(card);
       document.body.appendChild(box);
       // Avisa a la ventana padre (el editor de Maris AI) de que la preview
