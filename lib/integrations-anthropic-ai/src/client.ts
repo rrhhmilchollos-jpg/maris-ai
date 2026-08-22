@@ -114,7 +114,6 @@ async function requestLocalModel(params: LocalMessageParams, signal?: AbortSigna
   const timeout = setTimeout(() => controller.abort(), LOCAL_REQUEST_TIMEOUT_MS);
   const abortFromParent = () => controller.abort();
   signal?.addEventListener("abort", abortFromParent, { once: true });
-
   try {
     const config = getConfig();
     const headers: Record<string, string> = { "Content-Type": "application/json" };
