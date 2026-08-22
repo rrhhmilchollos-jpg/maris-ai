@@ -7,6 +7,9 @@
     ".": "./src/index.ts",
     "./batch": "./src/batch/index.ts"
   },
+  "scripts": {
+    "test:timeout-guard": "node scripts/timeout-guard-regression.mjs"
+  },
   "dependencies": {
     "p-limit": "^7.3.0",
     "p-retry": "^7.1.1"
