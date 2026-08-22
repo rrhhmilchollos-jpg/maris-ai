@@ -1621,6 +1621,10 @@ function JobStatusBadge({ status, stale }: { status: string; stale: boolean }) {
 }
 
 function StatCard({ label, value, loading, icon: Icon, subtle }: { label: string; value: number | string | undefined; loading?: boolean; icon: any; subtle?: boolean }) {
+  const displayValue = typeof value === "number" && Number.isFinite(value)
+    ? new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 }).format(value)
+    : value ?? 0;
+
   return (
     <Card className={subtle ? "bg-card/30 border-white/5" : "bg-card/50 border-white/5"}>
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -1628,7 +1632,7 @@ function StatCard({ label, value, loading, icon: Icon, subtle }: { label: string
         <Icon className={`h-4 w-4 ${subtle ? "text-muted-foreground" : "text-primary"}`} />
       </CardHeader>
       <CardContent>
-        {loading ? <Skeleton className="h-8 w-16" /> : <div className={`text-3xl font-bold font-mono ${subtle ? "text-muted-foreground" : "text-foreground"}`}>{value ?? 0}</div>}
+        {loading ? <Skeleton className="h-8 w-16" /> : <div className={`text-3xl font-bold font-mono ${subtle ? "text-muted-foreground" : "text-foreground"}`}>{displayValue}</div>}
       </CardContent>
     </Card>
   );
