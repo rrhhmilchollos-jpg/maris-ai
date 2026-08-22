@@ -709,7 +709,7 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
       refetchInterval: (query) => {
         const data = query.state.data as { status?: string } | undefined;
         if (!data) return 800;
-        if (data.status === "succeeded" || data.status === "failed") return false;
+        if (data.status === "succeeded" || data.status === "failed" || data.status === "reviewing") return false;
         return 800;
       },
       // La consola puede ejecutarse en una pestaña secundaria mientras el
@@ -771,8 +771,13 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
       toast({ title: "¡App generada!", description: "Tu aplicación está lista para verla." });
       import("@/lib/analytics").then(({ trackAppSucceeded }) => { trackAppSucceeded(kind, 0); });
       setLocation(`/app/${appId}`);
-    } else if (job.status === "failed") {
-      toast({ title: "Falló la generación", description: job.errorMessage || "Inténtalo otra vez.", variant: "destructive" });
+    } else if (job.status === "failed" || job.status === "reviewing") {
+      const requiresReview = job.status === "reviewing";
+      toast({
+        title: requiresReview ? "La generación requiere revisión" : "Falló la generación",
+        description: job.errorMessage || (requiresReview ? "El equipo técnico puede revisar este intento sin afectar tu app anterior." : "Inténtalo otra vez."),
+        variant: "destructive",
+      });
       setActiveJobId(null);
     }
   }, [job, queryClient, setLocation, toast, activeJobId, attachments, kind]);
