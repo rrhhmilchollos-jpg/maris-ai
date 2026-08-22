@@ -2091,8 +2091,14 @@ Comprobación visual manual · diagnóstico sin cambios automáticos
 
             <div className="hidden md:flex flex-1 items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-1.5 min-w-0">
               <Globe className="h-3.5 w-3.5 text-white/30 shrink-0" />
-              <span className="flex-1 truncate text-[12.5px] text-white/50 font-mono">{deployedUrl || `https://${(app?.title || "mi-app").toLowerCase().replace(/\s+/g, "-")}.marisai.es`}</span>
-              <button onClick={() => { if (deployedUrl) { navigator.clipboard.writeText(deployedUrl); toast({ title: "URL copiada" }); } }} className="shrink-0 text-white/30 hover:text-white/70 transition">
+              <span className="flex-1 truncate text-[12.5px] text-white/50 font-mono">{deployedUrl || "Vista previa · aún no publicada"}</span>
+              <button
+                type="button"
+                aria-label={deployedUrl ? "Copiar URL pública" : "No hay URL pública todavía"}
+                disabled={!deployedUrl}
+                onClick={() => { if (deployedUrl) { navigator.clipboard.writeText(deployedUrl); toast({ title: "URL copiada" }); } }}
+                className="shrink-0 text-white/30 hover:text-white/70 transition disabled:cursor-not-allowed disabled:opacity-35"
+              >
                 <Copy className="h-3.5 w-3.5" />
               </button>
               <button onClick={handleRefreshPreview} className="shrink-0 text-white/30 hover:text-white/70 transition">
