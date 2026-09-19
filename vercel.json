@@ -68,23 +68,23 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "http://5.78.101.207:3000/api/:path*"
+      "destination": "https://maris-ai-vw4h.onrender.com/api/:path*"
     },
     {
       "source": "/news-sitemap.xml",
-      "destination": "http://5.78.101.207:3000/api/news-sitemap.xml"
+      "destination": "https://maris-ai-vw4h.onrender.com/api/news-sitemap.xml"
     },
     {
       "source": "/sitemap.xml",
-      "destination": "http://5.78.101.207:3000/api/sitemap.xml"
+      "destination": "https://maris-ai-vw4h.onrender.com/api/sitemap.xml"
     },
     {
       "source": "/rss",
-      "destination": "http://5.78.101.207:3000/rss"
+      "destination": "https://maris-ai-vw4h.onrender.com/rss"
     },
     {
       "source": "/rss/:path*",
-      "destination": "http://5.78.101.207:3000/rss/:path*"
+      "destination": "https://maris-ai-vw4h.onrender.com/rss/:path*"
     },
     {
       "source": "/robots.txt",
@@ -103,14 +103,14 @@
       "has": [
         { "type": "header", "key": "user-agent", "value": ".*(Googlebot|bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot|facebookexternalhit|Twitterbot|LinkedInBot|WhatsApp|Discordbot|TelegramBot|Applebot).*" }
       ],
-      "destination": "http://5.78.101.207:3000/bot-render/news/:slug"
+      "destination": "https://maris-ai-vw4h.onrender.com/bot-render/news/:slug"
     },
     {
       "source": "/news",
       "has": [
         { "type": "header", "key": "user-agent", "value": ".*(Googlebot|bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot|facebookexternalhit|Twitterbot|LinkedInBot|WhatsApp|Discordbot|TelegramBot|Applebot).*" }
       ],
-      "destination": "http://5.78.101.207:3000/bot-render/news"
+      "destination": "https://maris-ai-vw4h.onrender.com/bot-render/news"
     },
     {
       "source": "/((?!assets|api|favicon|manifest|robots|sitemap|rss|llms|opengraph|logo|apple-touch|.well-known|pricing|showcase(?!/)|news|vs-emergent|vs-lovable|vs-bolt|vs-base44|que-es-vibe-coding|que-es-un-agente-de-ia|glosario|desarrollo-no-code-guia|landings|blog|en|legal|demo|afiliados|sign-up(?!/)|sign-in(?!/)|crear).*)",
