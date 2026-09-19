@@ -109,6 +109,78 @@ function boundedLocalMaxTokens(requested?: number): number {
   return Math.max(128, Math.min(intended, LOCAL_MAX_COMPLETION_TOKENS));
 }
 
+function isNativeOllama(config: LlmConfig): boolean {
+  return config.mode === "maris" && (
+    process.env.MARIS_LLM_API_MODE === "ollama" ||
+    /(^|\.)ollama([./]|$)/i.test(config.baseUrl) ||
+    /\/v1$/i.test(config.baseUrl)
+  );
+}
+
+function ollamaBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/v1\/?$/i, "").replace(/\/+$/, "");
+}
+
+function normalizeOllamaMessages(params: LocalMessageParams) {
+  const messages: Array<Record<string, unknown>> = [];
+  const system = params.system == null ? "" : normalizeContent(params.system);
+  if (system) messages.push({ role: "system", content: system });
+  for (const message of params.messages || []) {
+    const content = message.content;
+    if (Array.isArray(content)) {
+      const text = content.filter((block: any) => block?.type === "text").map((block: any) => block.text || "").join("\n");
+      const toolResult = content.find((block: any) => block?.type === "tool_result");
+      messages.push({
+        role: toolResult ? "tool" : String(message.role || "user"),
+        content: toolResult ? normalizeContent(toolResult.content) : text,
+        ...(toolResult?.tool_use_id ? { tool_call_id: toolResult.tool_use_id } : {}),
+      });
+    } else {
+      messages.push({ role: String(message.role || "user"), content: normalizeContent(content) });
+    }
+  }
+  return messages;
+}
+
+function normalizeOllamaTools(tools: unknown[]) {
+  return (tools || []).map((tool: any) => {
+    const fn = tool?.function || tool;
+    return {
+      type: "function",
+      function: {
+        name: fn?.name,
+        description: fn?.description || "",
+        parameters: fn?.parameters || fn?.input_schema || { type: "object", properties: {} },
+      },
+    };
+  }).filter((tool: any) => tool.function.name);
+}
+
+function nativeOllamaResponse(body: any, requestedModel: string): LocalMessageResponse {
+  const message = body?.message || {};
+  const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+  const content: Array<{ type: string; text?: string; [key: string]: unknown }> = [];
+  if (message.content) content.push({ type: "text", text: String(message.content) });
+  for (const [index, call] of toolCalls.entries()) {
+    const fn = call?.function || {};
+    const rawInput = fn.arguments ?? call?.arguments ?? {};
+    let input = rawInput;
+    if (typeof rawInput === "string") {
+      try { input = JSON.parse(rawInput); } catch { input = {}; }
+    }
+    content.push({ type: "tool_use", id: call?.id || `call_${Date.now()}_${index}`, name: fn.name || call?.name || "", input });
+  }
+  return {
+    id: body?.id,
+    type: "message",
+    role: "assistant",
+    model: body?.model || requestedModel,
+    content,
+    stop_reason: toolCalls.length ? "tool_use" : "end_turn",
+    usage: { input_tokens: body?.prompt_eval_count || 0, output_tokens: body?.eval_count || 0 },
+  };
+}
+
 async function requestLocalModel(params: LocalMessageParams, signal?: AbortSignal): Promise<LocalMessageResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LOCAL_REQUEST_TIMEOUT_MS);
@@ -118,6 +190,33 @@ async function requestLocalModel(params: LocalMessageParams, signal?: AbortSigna
     const config = getConfig();
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+
+    if (config.mode === "maris" && isNativeOllama(config)) {
+      const response = await fetch(`${ollamaBaseUrl(config.baseUrl)}/api/chat`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: resolveClaudeModel(params.model),
+          messages: normalizeOllamaMessages(params),
+          stream: false,
+          options: {
+            num_predict: boundedLocalMaxTokens(params.max_tokens),
+            temperature: params.temperature ?? 0.2,
+          },
+          ...(params.tools?.length ? { tools: normalizeOllamaTools(params.tools) } : {}),
+        }),
+        signal: controller.signal,
+      });
+      const body: any = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(body?.error?.message || body?.error || `El motor propio de Maris respondió HTTP ${response.status}`) as Error & { status?: number };
+        error.status = response.status;
+        throw error;
+      }
+      const result = nativeOllamaResponse(body, resolveClaudeModel(params.model));
+      if (!result.content.length) throw new Error("El motor propio de Maris devolvió una respuesta vacía.");
+      return result;
+    }
 
     if (config.mode === "maris") {
       const response = await fetch(`${config.baseUrl}/chat/completions`, {
@@ -129,6 +228,7 @@ async function requestLocalModel(params: LocalMessageParams, signal?: AbortSigna
           max_tokens: boundedLocalMaxTokens(params.max_tokens),
           temperature: params.temperature ?? 0.2,
           stream: false,
+          ...(params.tools?.length ? { tools: normalizeOllamaTools(params.tools) } : {}),
         }),
         signal: controller.signal,
       });
@@ -140,18 +240,7 @@ async function requestLocalModel(params: LocalMessageParams, signal?: AbortSigna
       }
       const text = String(body?.choices?.[0]?.message?.content || "").trim();
       if (!text) throw new Error("El motor propio de Maris devolvió una respuesta vacía.");
-      return {
-        id: body?.id,
-        type: "message",
-        role: "assistant",
-        model: body?.model || resolveClaudeModel(params.model),
-        content: [{ type: "text", text }],
-        stop_reason: body?.choices?.[0]?.finish_reason || "end_turn",
-        usage: {
-          input_tokens: Number(body?.usage?.prompt_tokens || 0),
-          output_tokens: Number(body?.usage?.completion_tokens || 0),
-        },
-      };
+      return { id: body?.id, type: "message", role: "assistant", model: body?.model || resolveClaudeModel(params.model), content: [{ type: "text", text }], stop_reason: body?.choices?.[0]?.finish_reason || "end_turn", usage: { input_tokens: Number(body?.usage?.prompt_tokens || 0), output_tokens: Number(body?.usage?.completion_tokens || 0) } };
     }
 
     const response = await fetch(`${config.baseUrl}/v1/messages`, {
