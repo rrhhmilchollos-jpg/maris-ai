@@ -32,7 +32,7 @@ services:
       - key: CLERK_WEBHOOK_SECRET
         sync: false
       - key: ZOCOIA_API_URL
-        value: "https://zocoia.es"
+        value: "https://api.zocoia.es"
       - key: ZOCOIA_API_KEY
         sync: false
       - key: FRONTEND_BASE_PATH
@@ -79,7 +79,7 @@ services:
       - key: REDIS_URL
         sync: false # URL de Redis para BullMQ (debe ser la misma que en el API)
       - key: ZOCOIA_API_URL
-        value: "https://zocoia.es"
+        value: "https://api.zocoia.es"
       - key: ZOCOIA_API_KEY
         sync: false
       - key: GITHUB_TOKEN

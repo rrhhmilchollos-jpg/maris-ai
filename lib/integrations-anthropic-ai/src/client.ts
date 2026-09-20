@@ -1,7 +1,5 @@
-// Cliente histórico compatible con la interfaz messages de Anthropic.
-// Maris AI usa ahora un motor Ollama PROPIO configurado por MARIS_LLM_URL.
-// La antigua pasarela de Zoco solo puede activarse de forma explícita para una
-// migración controlada; nunca es el valor por defecto.
+// Cliente compatible con la interfaz messages de Anthropic.
+// El backend de Maris puede usar su motor propio o la API server-side de ZocoIA.
 
 export type LocalMessageParams = {
   model?: string;
@@ -26,7 +24,7 @@ type LocalMessageResponse = {
   usage?: { input_tokens?: number; output_tokens?: number; [key: string]: unknown };
 };
 
-type LlmConfig = { baseUrl: string; apiKey: string; mode: "maris" | "legacy" };
+type LlmConfig = { baseUrl: string; apiKey: string; mode: "maris" | "zoco" };
 const LOCAL_REQUEST_TIMEOUT_MS = Number(process.env.MARIS_LLM_REQUEST_TIMEOUT_MS || 70_000);
 const LOCAL_MAX_COMPLETION_TOKENS = Number(process.env.MARIS_LLM_MAX_COMPLETION_TOKENS || 512);
 
@@ -34,6 +32,12 @@ const MARIS_MODELS = {
   fast: process.env.MARIS_LLM_MODEL_FAST || process.env.MARIS_LLM_MODEL || "qwen2.5-coder:1.5b",
   standard: process.env.MARIS_LLM_MODEL_STANDARD || process.env.MARIS_LLM_MODEL || "qwen2.5-coder:1.5b",
   max: process.env.MARIS_LLM_MODEL_MAX || process.env.MARIS_LLM_MODEL || "qwen2.5-coder:1.5b",
+} as const;
+
+const ZOCO_MODELS = {
+  fast: "zoco-flash",
+  standard: "zoco-plus",
+  max: "zoco-max",
 } as const;
 
 // Export histórico para los consumidores existentes del monorepo.
@@ -46,6 +50,13 @@ export function resolveClaudeModel(model?: string | null): string {
   if (lower.includes("flash") || lower.includes("haiku") || lower.includes("mini")) return MARIS_MODELS.fast;
   if (lower.includes("max") || lower.includes("opus") || lower.includes("70b") || lower.includes("405b")) return MARIS_MODELS.max;
   return MARIS_MODELS.standard;
+}
+
+function resolveZocoModel(model?: string | null): string {
+  const requested = String(model || "zoco-plus").trim().toLowerCase();
+  if (requested.includes("flash") || requested.includes("haiku") || requested.includes("mini")) return ZOCO_MODELS.fast;
+  if (requested.includes("max") || requested.includes("opus") || requested.includes("70b") || requested.includes("405b")) return ZOCO_MODELS.max;
+  return ZOCO_MODELS.standard;
 }
 
 function normalizeContent(value: unknown): string {
@@ -70,12 +81,12 @@ function getConfig(): LlmConfig {
     };
   }
 
-  // Migración excepcional, expresamente opt-in. Así Maris no vuelve a
-  // depender silenciosamente de Zoco ni de sus límites de inferencia.
-  if (process.env.MARIS_ALLOW_LEGACY_ZOCO_FALLBACK === "true") {
-    const apiKey = process.env.ZOCOIA_API_KEY || process.env.LOCAL_LLM_API_KEY || "";
-    const baseUrl = process.env.ZOCOIA_API_URL || process.env.LOCAL_LLM_BASE_URL || "";
-    if (apiKey && baseUrl) return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey, mode: "legacy" };
+  // Integración server-to-server explícita con ZocoIA. La clave nunca llega al
+  // navegador: solo se lee en el proceso de API/worker.
+  const zocoApiKey = String(process.env.ZOCOIA_API_KEY || "").trim();
+  const zocoBaseUrl = String(process.env.ZOCOIA_API_URL || "").trim();
+  if (zocoApiKey && zocoBaseUrl) {
+    return { baseUrl: zocoBaseUrl.replace(/\/+$/, ""), apiKey: zocoApiKey, mode: "zoco" };
   }
 
   throw new Error("El motor propio de Maris AI no está configurado. Define MARIS_LLM_URL y MARIS_LLM_MODEL.");
@@ -243,15 +254,28 @@ async function requestLocalModel(params: LocalMessageParams, signal?: AbortSigna
       return { id: body?.id, type: "message", role: "assistant", model: body?.model || resolveClaudeModel(params.model), content: [{ type: "text", text }], stop_reason: body?.choices?.[0]?.finish_reason || "end_turn", usage: { input_tokens: Number(body?.usage?.prompt_tokens || 0), output_tokens: Number(body?.usage?.completion_tokens || 0) } };
     }
 
-    const response = await fetch(`${config.baseUrl}/v1/messages`, {
+    const zoco = config.mode === "zoco";
+    const endpoint = zoco
+      ? `${config.baseUrl.replace(/\/v1\/?$/i, "")}/v1/messages`
+      : `${config.baseUrl}/v1/messages`;
+    const response = await fetch(endpoint, {
       method: "POST",
       headers,
-      body: JSON.stringify(normalizeLegacyParams(params)),
+      body: JSON.stringify(zoco
+        ? {
+            model: resolveZocoModel(params.model),
+            max_tokens: params.max_tokens || 4096,
+            ...(params.temperature == null ? {} : { temperature: params.temperature }),
+            ...(params.system ? { system: normalizeContent(params.system) } : {}),
+            messages: (params.messages || []).map((message) => ({ ...message, content: normalizeContent(message.content) })),
+            ...(params.tools?.length ? { tools: normalizeOllamaTools(params.tools) } : {}),
+          }
+        : normalizeLegacyParams(params)),
       signal: controller.signal,
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error((body as any)?.error?.message || `La pasarela heredada respondió HTTP ${response.status}`) as Error & { status?: number };
+      const error = new Error((body as any)?.error?.message || `El API de ${zoco ? "ZocoIA" : "la pasarela heredada"} respondió HTTP ${response.status}`) as Error & { status?: number };
       error.status = response.status;
       throw error;
     }
