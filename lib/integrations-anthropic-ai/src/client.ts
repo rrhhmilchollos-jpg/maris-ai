@@ -84,8 +84,11 @@ function getConfig(): LlmConfig {
   // Integración server-to-server explícita con ZocoIA. La clave nunca llega al
   // navegador: solo se lee en el proceso de API/worker.
   const zocoApiKey = String(process.env.ZOCOIA_API_KEY || "").trim();
-  const zocoBaseUrl = String(process.env.ZOCOIA_API_URL || "").trim();
-  if (zocoApiKey && zocoBaseUrl) {
+  // El dominio canónico evita que un despliegue nuevo apunte por error a
+  // api.marisai.es (que no es el gateway de inferencia). Puede sobrescribirse
+  // para entornos internos o staging con ZOCOIA_API_URL.
+  const zocoBaseUrl = String(process.env.ZOCOIA_API_URL || "https://www.zocoia.es").trim();
+  if (zocoApiKey) {
     return { baseUrl: zocoBaseUrl.replace(/\/+$/, ""), apiKey: zocoApiKey, mode: "zoco" };
   }
 
